@@ -1,0 +1,191 @@
+/* ============================================================
+   LLD Slides — "Blueprint" dark theme
+   Deep navy canvas, cyan/blue accents, engineering-drawing grid.
+   ============================================================ */
+
+:root {
+  --bp-bg:      #070b14;
+  --bp-bg-2:    #0b1324;
+  --bp-panel:   rgba(56, 189, 248, 0.05);
+  --bp-line:    rgba(56, 189, 248, 0.12);
+  --bp-grid:    rgba(56, 189, 248, 0.06);
+  --bp-cyan:    #22d3ee;
+  --bp-blue:    #38bdf8;
+  --bp-violet:  #a78bfa;
+  --bp-ink:     #e6eefb;
+  --bp-dim:     #8aa0c0;
+  --bp-good:    #4ade80;
+  --bp-bad:     #fb7185;
+  --bp-warn:    #fbbf24;
+  --bp-glow:    0 0 24px rgba(34, 211, 238, 0.35);
+}
+
+/* ---- canvas ---- */
+.slidev-layout {
+  background-color: var(--bp-bg);
+  background-image:
+    linear-gradient(var(--bp-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bp-grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+  color: var(--bp-ink);
+  font-feature-settings: "ss01", "cv01";
+}
+
+/* ---- headings ---- */
+.slidev-layout h1,
+.slidev-layout h2,
+.slidev-layout h3 {
+  font-family: "Fira Code", ui-monospace, monospace;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+.slidev-layout h1 {
+  font-weight: 700;
+  line-height: 1.18;          /* room so background-clip:text doesn't crop glyphs */
+  padding: 0.08em 0;
+  background: linear-gradient(100deg, #fff 10%, var(--bp-cyan) 55%, var(--bp-blue) 90%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.25));
+}
+.slidev-layout h2 { color: var(--bp-cyan); font-weight: 600; }
+.slidev-layout h2::before { content: "// "; color: var(--bp-dim); opacity: .6; }
+
+.slidev-layout a { color: var(--bp-blue); }
+.slidev-layout strong { color: #fff; }
+.slidev-layout code:not(pre code) {
+  color: var(--bp-cyan);
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid var(--bp-line);
+  border-radius: 4px; padding: 1px 6px; font-size: .9em;
+}
+.slidev-layout blockquote {
+  border-left: 3px solid var(--bp-cyan);
+  background: var(--bp-panel); color: var(--bp-dim);
+}
+
+/* ---- reusable bits ---- */
+.bp-chip {
+  display: inline-flex; align-items: center; gap: .4em;
+  font-family: "Fira Code", monospace; font-size: .72rem;
+  text-transform: uppercase; letter-spacing: .12em;
+  color: var(--bp-cyan);
+  border: 1px solid var(--bp-line); border-radius: 999px;
+  padding: .25em .8em; background: var(--bp-panel);
+}
+.bp-card {
+  border: 1px solid var(--bp-line); border-radius: 12px;
+  background: linear-gradient(180deg, rgba(56,189,248,0.06), rgba(56,189,248,0.02));
+  padding: 1rem 1.2rem; backdrop-filter: blur(4px);
+}
+.bp-card--cyan   { border-color: rgba(34,211,238,.35);  box-shadow: var(--bp-glow); }
+.bp-card--violet { border-color: rgba(167,139,250,.35); box-shadow: 0 0 24px rgba(167,139,250,.3); }
+.bp-card--blue   { border-color: rgba(56,189,248,.40);  box-shadow: 0 0 24px rgba(56,189,248,.3); }
+.bp-card--green  { border-color: rgba(74,222,128,.35);  box-shadow: 0 0 24px rgba(74,222,128,.28); }
+.bp-dim   { color: var(--bp-dim); }
+.bp-good  { color: var(--bp-good); }
+.bp-bad   { color: var(--bp-bad); }
+.bp-mono  { font-family: "Fira Code", monospace; }
+.bp-glow-text { text-shadow: var(--bp-glow); }
+
+/* keycap-style hint */
+.bp-key {
+  font-family: "Fira Code", monospace; font-size: .7rem;
+  border: 1px solid var(--bp-line); border-bottom-width: 2px;
+  border-radius: 5px; padding: .1em .45em; color: var(--bp-dim);
+  background: var(--bp-bg-2);
+}
+
+/* ---- code blocks (shiki) ---- */
+.slidev-layout .slidev-code {
+  border: 1px solid var(--bp-line); border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.4);
+  font-size: 0.85em;
+  background: #0b1324 !important;   /* tint One Dark Pro panel to blueprint navy */
+}
+.slidev-layout .slidev-code .line { background: transparent !important; }
+
+/* ---- deck 3: compact, scrollable code for pattern slides ---- */
+.patcode .slidev-code {
+  font-size: 0.62rem !important; line-height: 1.42 !important;
+}
+/* cap the code column so long examples never run off the bottom of the slide.
+   NB: Slidev lays slides out in a 980x551 canvas, so this is slide-space px,
+   not screen px — ~410 leaves the box inside the area below the title/one-liner. */
+.patcode { max-height: 410px; overflow-y: auto; overflow-x: hidden; }
+.patcode::-webkit-scrollbar { width: 6px; height: 6px; }
+.patcode::-webkit-scrollbar-thumb { background: var(--bp-line); border-radius: 3px; }
+
+/* participants list (the pattern's roles) */
+.roles { list-style: none; padding: 0; margin: .3rem 0 1rem; }
+.roles li { position: relative; padding-left: 1.1rem; margin: .3rem 0; line-height: 1.4; font-size: .8rem; color: var(--bp-ink); }
+.roles li::before { content: '\25C7'; position: absolute; left: 0; color: var(--bp-violet); font-size: .8rem; }
+
+/* ---- mermaid: make it feel native to the blueprint ---- */
+.mermaid { max-width: 100%; overflow: hidden; }
+.mermaid svg {
+  filter: drop-shadow(0 0 14px rgba(34,211,238,.12));
+  max-width: 100% !important; height: auto !important;   /* beat mermaid's inline width — never overflow */
+}
+
+/* ---- cover / section flourish ---- */
+.bp-eyebrow {
+  font-family: "Fira Code", monospace; color: var(--bp-cyan);
+  text-transform: uppercase; letter-spacing: .35em; font-size: .8rem;
+}
+.bp-rule {
+  height: 1px; border: 0;
+  background: linear-gradient(90deg, var(--bp-cyan), transparent);
+}
+
+.abs-br { position: absolute; bottom: 0; right: 0; }
+
+/* green "free" chip variant */
+.bp-chip--good { color: var(--bp-good); border-color: rgba(74,222,128,.4); }
+
+/* "Your turn" practice prompt folded into concept slides */
+.yourturn {
+  margin-top: 1.1rem; border-left: 3px solid var(--bp-violet);
+  background: rgba(167,139,250,.07); padding: .5rem .95rem;
+  border-radius: 0 8px 8px 0; font-size: .82rem; color: var(--bp-ink);
+}
+.yourturn b { color: var(--bp-violet); font-family: "Fira Code", monospace; }
+
+/* key-point bullet lists (Deck 2 concept slides) */
+.slidev-layout ul.kpts { list-style: none; padding: 0; margin: .6rem 0 0; }
+.slidev-layout ul.kpts li { position: relative; padding-left: 1.1rem; margin: .35rem 0; line-height: 1.4; }
+.slidev-layout ul.kpts li::marker { content: ''; }
+.slidev-layout ul.kpts li::before { content: '\25B8'; position: absolute; left: 0; color: var(--bp-cyan); }
+
+/* interview-type rows */
+.itype { display: flex; align-items: baseline; gap: .8rem; }
+.itype .dur { font-family: "Fira Code", monospace; font-size: .68rem; color: var(--bp-cyan); border: 1px solid var(--bp-line); border-radius: 5px; padding: .1em .5em; }
+
+/* ---- section divider: giant ghosted numeral + left-aligned title ---- */
+.section-slide { display: flex; align-items: center; height: 100%; }
+.section-slide .ghost-num {
+  position: absolute; right: 3%; top: 50%; transform: translateY(-50%);
+  font-family: "Fira Code", monospace; font-weight: 700; font-size: 34rem;
+  line-height: .8; color: rgba(56,189,248,.06); pointer-events: none; user-select: none;
+  text-shadow: 0 0 80px rgba(34,211,238,.08);
+}
+.section-slide .section-body { position: relative; z-index: 1; padding-left: 1rem; }
+.section-slide .section-body h1 { font-size: 4.5rem; margin: .2rem 0; }
+.section-slide .accent-bar {
+  width: 64px; height: 4px; border-radius: 999px; margin-bottom: 1.2rem;
+  background: linear-gradient(90deg, var(--bp-cyan), transparent); box-shadow: var(--bp-glow);
+}
+
+/* progress dots used in the agenda */
+.bp-track { display: flex; gap: .4rem; align-items: center; }
+.bp-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--bp-line); }
+.bp-dot--on { background: var(--bp-cyan); box-shadow: var(--bp-glow); }
+
+/* footer line on every slide */
+.slidev-layout .bp-footer {
+  position: absolute; bottom: 14px; left: 32px; right: 32px;
+  display: flex; justify-content: space-between;
+  font-family: "Fira Code", monospace; font-size: .62rem;
+  color: var(--bp-dim); opacity: .55; letter-spacing: .08em;
+  border-top: 1px solid var(--bp-line); padding-top: 6px;
+}

@@ -1,0 +1,761 @@
+[
+  {
+    "slug": "singleton",
+    "title": "Singleton",
+    "category": "Creational",
+    "oneLiner": "Guarantee a class has exactly one instance and hand every caller that same shared object.",
+    "problem": "Some resources must exist only once (a logger, a config store, a connection pool); spinning up duplicates wastes resources or splits state into inconsistent copies. Singleton funnels all access through one shared instance so everyone reads and writes the same object.",
+    "keyPoints": [
+      "Hide the constructor; one cached instance behind an accessor",
+      "One shared instance — every caller's writes are seen everywhere",
+      "Guard the first build with a lock + re-check (thread-safe)",
+      "Use for one owner of shared state; else inject dependencies"
+    ],
+    "python": "import threading\n\n\nclass Settings:\n    \"\"\"A single shared config store, created exactly once.\"\"\"\n    _instance = None\n    _lock = threading.Lock()\n\n    def __new__(cls):\n        if cls._instance is None:\n            with cls._lock:                 # guard the first creation\n                if cls._instance is None:   # re-check inside the lock\n                    cls._instance = super().__new__(cls)\n                    cls._instance.values = {}\n        return cls._instance\n\n\nif __name__ == \"__main__\":\n    a = Settings()\n    a.values[\"theme\"] = \"dark\"\n\n    b = Settings()                          # no new object is built\n    print(\"same object:\", a is b)           # True\n    print(\"b sees a's write:\", b.values[\"theme\"])  # dark",
+    "participants": [
+      "Singleton (holds the cached instance and the access point)",
+      "Client (requests the instance instead of constructing one)"
+    ],
+    "diagram": "classDiagram\n    class Singleton {\n        -instance: Singleton\n        -__new__()\n        +get_instance() Singleton\n    }\n    class Client\n    Client --> Singleton : get_instance()\n    Singleton --> Singleton : caches",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "SingletonInstancePool",
+      "idea": "Every call to the accessor returns the one cached object; the first call builds it, every later call reuses it, and a lock keeps concurrent callers from building a second.",
+      "mechanic": "Layout: two stacked client lanes on the left (Client A, Client B), a central Instance slot in the middle, and a counter 'objects built: N' above it. The Instance slot has three explicit states: EMPTY (dashed outline, faint), CREATED (solid filled box labeled '#42 values={}'), and (transiently) WAITING for a blocked caller. Actions: (1) Each lane has a 'get_instance()' button. First click on EMPTY: an arrow animates from that lane to the center, the slot transitions EMPTY -> CREATED with a one-shot 'new' badge fade-in (~400ms), and the counter ticks 0 -> 1. (2) Every later click from either lane: an arrow animates to the SAME box, the box scales up 1.0 -> 1.08 -> 1.0 over ~250ms and flashes a 'reused' tag, while 'objects built' stays pinned at 1. (3) A 'race mode' button fires Client A and Client B at the same tick. With the 'lock' toggle OFF: both arrows reach center together, two ghost boxes briefly appear and a red 'DATA RACE - 2 objects' warning flashes, counter momentarily shows 2. With 'lock' toggle ON: the first arrow holds a small lock icon over the slot, the second client enters state WAITING (greyed, spinner) until the box reaches CREATED, then the second arrow resolves to the existing box as 'reused'; counter never exceeds 1. (4) 'reset' returns the slot to EMPTY, clears badges, and sets the counter to 0. All transitions are CSS/transform driven so the component is fully self-contained."
+    },
+    "realWorld": [
+      "Python's logging module returns the same root logger via logging.getLogger(); the module object itself is effectively a singleton.",
+      "Database/HTTP connection pools (e.g. SQLAlchemy engines, requests sessions) shared app-wide so connections are reused rather than recreated.",
+      "OS-level coordinators like a print spooler or a process-wide configuration/registry that must reflect one consistent state."
+    ],
+    "gotcha": "Singleton smuggles in global mutable state, which couples callers to it and makes unit tests bleed into each other (one test's writes leak into the next). When you mainly need 'one instance per app run,' prefer creating it once and injecting it as a dependency instead of reaching for a global accessor."
+  },
+  {
+    "slug": "builder",
+    "title": "Builder",
+    "category": "Creational",
+    "oneLiner": "Assemble a complex object field by field through a fluent chain, then freeze it with one build() call.",
+    "problem": "Objects with many optional fields force you into telescoping constructors or long positional argument lists where one misplaced None silently corrupts state. Builder lets callers set only what they need, by name, in any order.",
+    "keyPoints": [
+      "Each setter mutates scratch state and returns self; build() emits the product",
+      "No nulls for skipped fields; any order; validation in build()",
+      "Use for many optional fields or an immutable product",
+      "Add a field = one new method, no constructor churn"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\n\nclass Pizza:\n    def __init__(self, size, toppings, crust):\n        self.size, self.toppings, self.crust = size, toppings, crust\n\n    def __str__(self):\n        tops = \", \".join(self.toppings) or \"no toppings\"\n        return f\"{self.size} {self.crust}-crust pizza with {tops}\"\n\n\nclass PizzaBuilder(ABC):\n    def __init__(self):\n        self._size, self._crust, self._toppings = \"medium\", \"thin\", []\n\n    def size(self, s): self._size = s; return self\n    def crust(self, c): self._crust = c; return self\n    def add(self, topping): self._toppings.append(topping); return self\n\n    @abstractmethod\n    def build(self): ...\n\n\nclass StandardPizzaBuilder(PizzaBuilder):\n    def build(self):\n        return Pizza(self._size, self._toppings, self._crust)\n\n\npizza = (StandardPizzaBuilder()\n         .size(\"large\").crust(\"stuffed\")\n         .add(\"mushroom\").add(\"olive\").build())\nprint(pizza)  # large stuffed-crust pizza with mushroom, olive",
+    "participants": [
+      "Product (Pizza)",
+      "Builder (PizzaBuilder, abstract)",
+      "ConcreteBuilder (StandardPizzaBuilder)",
+      "Director (optional)",
+      "Client"
+    ],
+    "diagram": "classDiagram\n    class Product {\n        +describe()\n    }\n    class Builder {\n        <<abstract>>\n        +size(s) Builder\n        +crust(c) Builder\n        +add(t) Builder\n        +build() Product\n    }\n    class ConcreteBuilder {\n        +build() Product\n    }\n    class Director {\n        +construct(b) Product\n    }\n    Builder <|-- ConcreteBuilder\n    ConcreteBuilder ..> Product : creates\n    Director ..> Builder : drives\n    Client ..> ConcreteBuilder : chains",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "FluentBuilderChain",
+      "idea": "A builder accumulates mutable scratch state across chained calls and only materializes an immutable, frozen product when build() is invoked.",
+      "mechanic": "Three explicit states drive the component: EMPTY, DRAFTING, BUILT. EMPTY (initial): a 'Builder draft' panel shows three rows (size, crust, toppings) rendered as ghost/placeholder text with the defaults medium / thin / no toppings. A row of step buttons is enabled: [size: large], [crust: stuffed], [add: mushroom], [add: olive], [build()], [Reset]. Clicking any setter button moves to DRAFTING: the clicked call slides in and appends to a horizontal fluent chain strip at the top (e.g. StandardPizzaBuilder().size('large').crust('stuffed')...), the matching draft row flips from ghost to solid and pulses once to highlight the field it mutated (toppings appends a chip rather than replacing), and a small curved 'return self' arrow animates looping from the just-added call segment back to the chain head to show chaining continues. Clicking build() transitions to BUILT: the draft panel snapshots downward into a locked Product card that fades to grey, gains a lock glyph and an 'immutable' badge, and the chain strip appends .build(); after this, clicking any setter button triggers a brief red shake plus a 'product is frozen' toast and no state change. Reset returns to EMPTY: the Product card and chain strip clear with a quick fade, draft rows revert to ghost defaults, and setter buttons re-enable."
+    },
+    "realWorld": [
+      "Python stdlib http.client and requests/urllib3 assemble requests via incremental configuration before sending.",
+      "SQLAlchemy and Django ORM querysets chain .filter().order_by().limit() then materialize on execution, mirroring builder semantics.",
+      "Java's StringBuilder and Lombok @Builder, plus protobuf message builders, are canonical fluent builders."
+    ],
+    "gotcha": "Do not reach for Builder when an object has few fields and no optional/ordering complexity. A dataclass with defaults or keyword-only arguments is simpler and clearer; a builder there is ceremony that hides a one-line constructor."
+  },
+  {
+    "slug": "factory-method",
+    "title": "Factory Method",
+    "category": "Creational",
+    "oneLiner": "A base class owns the workflow but defers \"which object to build\" to its subclasses.",
+    "problem": "A growing if/else or switch that picks which concrete class to instantiate couples your core logic to every type and must be edited for each new one. Factory Method removes that central branching so adding a type means adding a class, not touching existing code.",
+    "keyPoints": [
+      "Creator calls an overridable factory method inside shared logic",
+      "Client codes to the Product interface, never a concrete class",
+      "New variant = new Creator + Product pair, no edits",
+      "Use when the subclass decides the type within a shared workflow"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\n\nclass Button(ABC):\n    @abstractmethod\n    def render(self) -> str: ...\n\n\nclass HtmlButton(Button):\n    def render(self) -> str:\n        return \"<button>Click</button>\"\n\n\nclass NativeButton(Button):\n    def render(self) -> str:\n        return \"[ Click ]\"\n\n\nclass Dialog(ABC):\n    @abstractmethod\n    def create_button(self) -> Button:  # factory method\n        ...\n\n    def render(self) -> str:            # shared workflow\n        return f\"Dialog -> {self.create_button().render()}\"\n\n\nclass WebDialog(Dialog):\n    def create_button(self) -> Button:\n        return HtmlButton()\n\n\nclass DesktopDialog(Dialog):\n    def create_button(self) -> Button:\n        return NativeButton()\n\n\nfor dialog in (WebDialog(), DesktopDialog()):\n    print(dialog.render())",
+    "participants": [
+      "Product (Button)",
+      "ConcreteProduct (HtmlButton, NativeButton)",
+      "Creator (Dialog)",
+      "ConcreteCreator (WebDialog, DesktopDialog)"
+    ],
+    "diagram": "classDiagram\n    class Button {\n        <<interface>>\n        +render() str\n    }\n    class HtmlButton {\n        +render() str\n    }\n    class NativeButton {\n        +render() str\n    }\n    class Dialog {\n        <<abstract>>\n        +create_button() Button\n        +render() str\n    }\n    class WebDialog {\n        +create_button() Button\n    }\n    class DesktopDialog {\n        +create_button() Button\n    }\n    Button <|.. HtmlButton\n    Button <|.. NativeButton\n    Dialog <|-- WebDialog\n    Dialog <|-- DesktopDialog\n    Dialog ..> Button : creates",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "FactoryMethodDialogForge",
+      "idea": "The Creator subclass you pick decides which Product the one shared render() workflow produces, while the workflow steps themselves never change.",
+      "mechanic": "Layout: a top row of Creator tiles (WebDialog, DesktopDialog, plus a dimmed dashed 'Add MobileDialog' tile) above a fixed horizontal render() pipeline drawn as three boxes [start render()] -> [call create_button()] -> [show output], with a Product lane underneath holding HtmlButton and NativeButton chips. Visual states are explicit: (1) IDLE - no tile selected, pipeline boxes are outlined and gray, output panel reads 'pick a Creator'; (2) DISPATCHING - the clicked tile lights up and a small token labeled 'create_button()' animates left-to-right along the pipeline (CSS transform/translateX over ~700ms), each box it passes pulsing in turn; (3) RESOLVED - at the middle box the token visibly forks downward to exactly that Creator's Product chip (HtmlButton for WebDialog, NativeButton for DesktopDialog), which scales up and highlights, and the output panel cross-fades to the matching string ('<button>Click</button>' vs '[ Click ]'). Clicking any other Creator tile replays DISPATCHING from IDLE; the pipeline boxes are identical every run, reinforcing that only the forked Product differs. User actions: (a) click a Creator tile -> run the IDLE->DISPATCHING->RESOLVED animation; (b) click 'Add MobileDialog' -> a fresh Creator tile and a fresh ToastButton Product chip slide in from the right (translateX + fade ~500ms) while every existing tile, pipeline box, and the highlighted Product stay completely still, with a brief 'no edits to existing classes' caption fading in to illustrate Open/Closed; (c) toggle 'Simple Factory mode' -> the Creator tiles collapse/morph into a single central 'switch(type)' block listing if/elif branches, and now each time you press 'Add type' a new 'elif' line is inserted into that block while it shakes and flashes a red 'edit me' badge, directly contrasting the centralized-edit cost against the per-class Factory Method approach. A small 'Reset' control returns everything to IDLE with all added tiles/branches removed."
+    },
+    "realWorld": [
+      "Python's logging module: Logger.makeRecord() is a factory method subclasses override to produce custom LogRecord objects.",
+      "Django's class-based views override get_queryset()/get_form_class() so the base dispatch flow builds the right object per view.",
+      "Java's java.util.Collection.iterator() and Calendar.getInstance(), where subclasses/locales decide the concrete returned type."
+    ],
+    "gotcha": "Do not reach for it when you only have one product type or a stable, small set; spinning up a Creator subclass per Product adds class explosion. A plain Simple Factory or even direct construction is often enough, and in Python passing the class/callable as an argument frequently beats an inheritance hierarchy."
+  },
+  {
+    "slug": "abstract-factory",
+    "title": "Abstract Factory",
+    "category": "Creational",
+    "oneLiner": "One factory hands you a whole matched family of objects, so you never wire incompatible parts together.",
+    "problem": "When several objects must come from the same variant (same OS theme, same DB engine, same channel), scattered conditionals let callers accidentally pair a Postgres connection with a MySQL dialect. Abstract Factory makes such mismatches structurally impossible.",
+    "keyPoints": [
+      "One factory returns a whole matched family of products",
+      "Swap the family by swapping one factory; client untouched",
+      "Use when products must vary together and never mix",
+      "Unlike Factory Method (one product), it makes a related set"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\nclass Connection(ABC):\n    @abstractmethod\n    def dsn(self) -> str: ...\n\nclass Dialect(ABC):\n    @abstractmethod\n    def paginate(self, limit: int) -> str: ...\n\nclass PgConn(Connection):\n    def dsn(self): return \"postgres://localhost/app\"\nclass PgDialect(Dialect):\n    def paginate(self, limit): return f\"LIMIT {limit}\"\n\nclass MyConn(Connection):\n    def dsn(self): return \"mysql://localhost/app\"\nclass MyDialect(Dialect):\n    def paginate(self, limit): return f\"LIMIT {limit} OFFSET 0\"\n\nclass DBFactory(ABC):\n    @abstractmethod\n    def connection(self) -> Connection: ...\n    @abstractmethod\n    def dialect(self) -> Dialect: ...\n\nclass PostgresFactory(DBFactory):\n    def connection(self): return PgConn()\n    def dialect(self): return PgDialect()\n\nclass MySQLFactory(DBFactory):\n    def connection(self): return MyConn()\n    def dialect(self): return MyDialect()\n\ndef run(factory: DBFactory):\n    print(factory.connection().dsn(), \"|\", factory.dialect().paginate(10))\n\nrun(PostgresFactory())   # postgres://localhost/app | LIMIT 10\nrun(MySQLFactory())      # mysql://localhost/app | LIMIT 10 OFFSET 0",
+    "participants": [
+      "AbstractFactory",
+      "ConcreteFactory",
+      "AbstractProduct",
+      "ConcreteProduct",
+      "Client"
+    ],
+    "diagram": "classDiagram\n    class DBFactory {\n        <<interface>>\n        +connection() Connection\n        +dialect() Dialect\n    }\n    class Connection {\n        <<interface>>\n        +dsn()\n    }\n    class Dialect {\n        <<interface>>\n        +paginate(limit)\n    }\n    class PostgresFactory {\n        +connection() Connection\n        +dialect() Dialect\n    }\n    class MySQLFactory {\n        +connection() Connection\n        +dialect() Dialect\n    }\n    class PgConn\n    class PgDialect\n    class MyConn\n    class MyDialect\n    DBFactory <|.. PostgresFactory\n    DBFactory <|.. MySQLFactory\n    Connection <|.. PgConn\n    Connection <|.. MyConn\n    Dialect <|.. PgDialect\n    Dialect <|.. MyDialect\n    PostgresFactory ..> PgConn : creates\n    PostgresFactory ..> PgDialect : creates\n    MySQLFactory ..> MyConn : creates\n    MySQLFactory ..> MyDialect : creates\n    Client --> DBFactory : uses",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "FamilySwitchBench",
+      "idea": "Picking one factory locks every product to the same variant; the client code never changes.",
+      "mechanic": "Layout: a fixed client-call line at top reading run(factory) -> connection().dsn() | dialect().paginate(10), two product slots below it labeled Connection and Dialect, and a primary segmented toggle Factory: [Postgres | MySQL]. Each slot is a card showing the concrete class name and its returned value. Visual states for each slot: postgres (PgConn / PgDialect), mysql (MyConn / MyDialect), and mismatch (one card outlined as a broken pair). The output bar at the bottom has two states: matched (single rendered DSN | LIMIT line) and mismatch (the line is struck through with a Mismatch badge). Actions: (1) Flip the Factory toggle: both slot cards run a synchronized 300ms card-flip; the front face fades out, the class name swaps, and on the flip's back face the value text retypes character-by-character; the output bar then re-renders to the matched state. The client-call line never changes, with a held pulse highlight to underscore that the caller stays identical. (2) Turn on the Allow mixing toggle: the unified Factory toggle dims and each slot reveals its own [Pg | My] picker. Picking a connection and dialect from different families immediately drives both cards to the mismatch state (the mismatched card border shakes once) and flips the output bar to the mismatch state with the struck-through line. Turning Allow mixing back off snaps both slots back to the current factory's family with a re-flip and clears any mismatch."
+    },
+    "realWorld": [
+      "GUI toolkits that swap an entire look-and-feel family (Java Swing pluggable Look and Feel, Qt styles).",
+      "SQLAlchemy / JDBC dialect-and-driver pairs selected per database engine so connection and SQL generation stay consistent.",
+      "Cloud SDK provider clients (boto3 session, terraform providers) that vend a coherent family of service objects for one backend."
+    ],
+    "gotcha": "Adding a brand-new product type forces a change to the factory interface and every concrete factory; if your product set is stable but variants are few, a plain Factory Method or simple config map is lighter."
+  },
+  {
+    "slug": "prototype",
+    "title": "Prototype",
+    "category": "Creational",
+    "oneLiner": "Create new objects by cloning a ready-made instance instead of rebuilding them from scratch.",
+    "problem": "Re-running expensive or intricate construction logic for every near-identical object is slow and repetitive, and it leaks setup details to the caller. External copying also breaks when fields are private or the concrete class is hidden behind an interface.",
+    "keyPoints": [
+      "clone() returns an independent copy — no constructor or class name",
+      "Skips heavy init; defaults live in one template you copy",
+      "Use for many similar instances, or when you hold only an interface",
+      "Shallow copy shares nested state — deep-copy to isolate clones"
+    ],
+    "python": "import copy\nfrom abc import ABC, abstractmethod\n\n\nclass Shape(ABC):\n    @abstractmethod\n    def clone(self) -> \"Shape\": ...\n\n\nclass Rectangle(Shape):\n    def __init__(self, w, h, style):\n        self.w, self.h, self.style = w, h, style  # style is a mutable dict\n\n    def clone(self) -> \"Shape\":\n        return copy.deepcopy(self)  # deep copy so nested style isn't shared\n\n    def __repr__(self):\n        return f\"Rectangle({self.w}x{self.h}, {self.style})\"\n\n\ntemplate = Rectangle(4, 2, {\"fill\": \"blue\", \"border\": 1})  # prototype\n\na = template.clone()\nb = template.clone()\nb.w = 8\nb.style[\"fill\"] = \"red\"  # mutating b leaves template + a untouched\n\nprint(template)  # Rectangle(4x2, {'fill': 'blue', 'border': 1})\nprint(a)         # Rectangle(4x2, {'fill': 'blue', 'border': 1})\nprint(b)         # Rectangle(8x2, {'fill': 'red', 'border': 1})",
+    "participants": [
+      "Prototype (abstract clone interface)",
+      "ConcretePrototype (implements clone)",
+      "Client",
+      "PrototypeRegistry (optional, keyed templates)"
+    ],
+    "diagram": "classDiagram\n    class Shape {\n        <<abstract>>\n        +clone() Shape\n    }\n    class Rectangle {\n        +w\n        +h\n        +style\n        +clone() Shape\n    }\n    class Circle {\n        +radius\n        +style\n        +clone() Shape\n    }\n    class Client {\n        +build()\n    }\n    Shape <|-- Rectangle\n    Shape <|-- Circle\n    Client --> Shape : clones",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "PrototypeCloneForge",
+      "idea": "A clone copies scalar values outright but, by default, only copies the reference to nested mutable state, the deep-vs-shallow trap at the heart of Prototype.",
+      "mechanic": "Layout: a fixed Template card on the left showing scalars (width number, color swatch) plus a nested 'tags' chip-list in its own bordered sub-box; a clone slot on the right (empty until cloned); and a top toggle Copy mode = SHALLOW | DEEP. Component states: EMPTY (no clone yet), LINKED (shallow clone made, tag-boxes joined), ISOLATED (deep clone made, tag-boxes separate), CORRUPTED (shallow clone edit bled into template). Actions and exactly what animates: (1) Click Clone -> a card slides out of the Template into the right slot over ~400ms; in SHALLOW mode a pulsing link line draws from the clone's tag sub-box to the template's shared tag sub-box and state becomes LINKED, in DEEP mode the tag sub-box visibly splits into a second independent box (duplicate chips fade in) and state becomes ISOLATED. (2) Edit clone width via +/- stepper -> only the clone's width digit flips and bumps; the template never reacts (scalars are always copied). (3) Click 'Add tag' on the clone -> a new chip pops in on the clone; in LINKED state the SAME chip simultaneously pops onto the template's tag-list along the glowing link line, the link flashes, and state flips to CORRUPTED with a 'shared reference mutated' caption; in ISOLATED state the chip appears only on the clone. (4) Click Reset -> the clone slot empties, the template's tags animate back to the pristine set, and state returns to EMPTY. A small legend reads off the current state name as it changes."
+    },
+    "realWorld": [
+      "Python stdlib copy.copy / copy.deepcopy and the __copy__ / __deepcopy__ hooks objects implement.",
+      "JavaScript structuredClone and object spread used to duplicate configured objects.",
+      "Game engines and editors cloning a configured entity/template (e.g. Unity Instantiate of a prefab) instead of rebuilding it."
+    ],
+    "gotcha": "Default shallow clones share nested mutable objects, so editing one clone silently mutates the original and every other clone; deep-copy any mutable inner state. Skip Prototype for cheap, stateless objects where a plain constructor is clearer."
+  },
+  {
+    "slug": "adapter",
+    "title": "Adapter",
+    "category": "Structural",
+    "oneLiner": "Wrap an incompatible class so it speaks the interface your client already expects.",
+    "problem": "A class you must use (legacy code, a vendor SDK) has the right behavior but the wrong method names, parameters, or return types. You can't edit either side, yet they must work together.",
+    "keyPoints": [
+      "Adapter implements Target, wraps Adaptee, translates each call",
+      "Client and adaptee stay untouched and decoupled",
+      "Prefer object adapters (composition) over class adapters",
+      "Use to fit a legacy or third-party API to your contract"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\nclass TempSensor(ABC):              # Target\n    @abstractmethod\n    def read_celsius(self) -> float: ...\n\nclass FahrenheitProbe:              # Adaptee (incompatible API)\n    def __init__(self, f): self._f = f\n    def get_fahrenheit(self) -> float: return self._f\n\nclass ProbeAdapter(TempSensor):     # Adapter\n    def __init__(self, probe: FahrenheitProbe):\n        self._probe = probe\n    def read_celsius(self) -> float:\n        return round((self._probe.get_fahrenheit() - 32) * 5 / 9, 1)\n\ndef report(sensor: TempSensor):     # Client knows only Target\n    print(f\"{sensor.read_celsius()} C\")\n\nreport(ProbeAdapter(FahrenheitProbe(98.6)))   # 37.0 C",
+    "participants": [
+      "Target",
+      "Adaptee",
+      "Adapter",
+      "Client"
+    ],
+    "diagram": "classDiagram\n    class Target {\n        <<interface>>\n        +request()\n    }\n    class Adaptee {\n        +specificRequest()\n    }\n    class Adapter {\n        -adaptee: Adaptee\n        +request()\n    }\n    class Client\n    Target <|.. Adapter\n    Adapter --> Adaptee : translates\n    Client --> Target : depends on",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "AdapterPlugTranslator",
+      "idea": "The adapter is a translator socket: the client's plug shape never changes, only the adapter converts it to fit the foreign appliance.",
+      "mechanic": "Layout: a fixed Client plug labeled request() on the left, an Adaptee socket labeled specificRequest() on the right, and a center gap. A toggle 'Adapter: REMOVED / INSERTED' drives two explicit states. STATE REMOVED (default): clicking 'Send' slides a pulse dot from plug toward socket; at the gap it stops, snaps back to the plug, and a 'shape mismatch' badge flashes over the gap (CSS shake, ~600ms); the socket stays gray. STATE INSERTED: flipping the toggle animates an Adapter block sliding into the center gap (scale/opacity in). Now 'Send' launches the pulse carrying the text 'request()'; as it crosses the Adapter block its label cross-fades to 'specificRequest()', it reaches the socket which turns green, then a return pulse travels back with '98.6 F' cross-fading to '37.0 C' as it re-crosses the Adapter, ending at the plug. A persistent counter reads 'Client edits: 0  Adaptee edits: 0' and is hard-coded to stay 0 in both states to make 'no source modification' explicit. Buttons: Send (replays the current state's animation), and the Adapter toggle."
+    },
+    "realWorld": [
+      "Python io.TextIOWrapper adapts a raw byte stream into a text interface; collections.abc mixins adapt minimal methods into full container APIs.",
+      "Java's java.io.InputStreamReader adapts a byte InputStream to a character Reader, and Arrays.asList adapts an array to the List interface.",
+      "Wrapping a third-party payment or SDK client (Stripe, a legacy gateway) behind your own service interface."
+    ],
+    "gotcha": "Don't reach for Adapter when you also need to add behavior or restrict the API: that's Decorator or Facade. An adapter only translates an existing interface; piling logic into it turns it into a hard-to-test god class."
+  },
+  {
+    "slug": "facade",
+    "title": "Facade",
+    "category": "Structural",
+    "oneLiner": "Wrap a tangle of subsystems behind one clean entry point so clients call a single method, not five.",
+    "problem": "A simple task often means orchestrating several low-level components in the right order, with every caller duplicating that choreography and coupling tightly to internals. Facade hides that complexity behind one high-level interface so clients stop juggling moving parts.",
+    "keyPoints": [
+      "One object fronts the subsystems and sequences their calls",
+      "Clients depend only on the facade; subsystems stay swappable",
+      "Use for a multi-step workflow many callers invoke the same way",
+      "Adds convenience, not restriction — subsystems stay usable directly"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\n\nclass Subsystem(ABC):\n    @abstractmethod\n    def run(self) -> None: ...\n\n\nclass Encoder(Subsystem):\n    def run(self): print(\"Encoder: transcoding to H.264\")\n\n\nclass Subtitler(Subsystem):\n    def run(self): print(\"Subtitler: burning captions\")\n\n\nclass Uploader(Subsystem):\n    def run(self): print(\"Uploader: pushing to CDN\")\n\n\nclass PublishFacade:                        # Facade\n    def __init__(self):\n        self._steps = [Encoder(), Subtitler(), Uploader()]\n\n    def publish(self, title: str) -> None:  # one simple entry point\n        print(f\"Publishing '{title}'...\")\n        for step in self._steps:\n            step.run()\n        print(\"Done: live on CDN\")\n\n\nPublishFacade().publish(\"intro.mp4\")        # client touches only the facade",
+    "participants": [
+      "Facade",
+      "Subsystem",
+      "ConcreteSubsystem",
+      "Client"
+    ],
+    "diagram": "classDiagram\n    class Client\n    class PublishFacade {\n        -steps\n        +publish(title)\n    }\n    class Subsystem {\n        <<abstract>>\n        +run()\n    }\n    class Encoder {\n        +run()\n    }\n    class Subtitler {\n        +run()\n    }\n    class Uploader {\n        +run()\n    }\n    Client --> PublishFacade\n    PublishFacade o-- Subsystem\n    Subsystem <|-- Encoder\n    Subsystem <|-- Subtitler\n    Subsystem <|-- Uploader",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "FacadeOrchestrationStage",
+      "idea": "A facade turns one client call into an ordered cascade of subsystem calls, while the client stays unaware of the count or sequence.",
+      "mechanic": "Layout: a Client node on the left, a column of subsystem boxes on the right (Encoder, Subtitler, Uploader), and a single Facade node that appears between them only in Facade mode. A mode toggle (Direct | Facade), a Publish button, and an 'Add Watermark step' toggle sit in a control bar; a live 'Client coupling' counter is shown.\n\nSubsystem box states, each a distinct fill-less border style and label: idle (thin grey border, label 'idle'), running (pulsing border, label 'running'), done (solid border, label 'done'). Boxes reset to idle before each Publish.\n\nDirect mode: the Client has one wire drawn to every subsystem box (3 wires, or 4 once Watermark is added), and the coupling counter equals the wire count. Clicking Publish animates the wires sequentially, one every 500ms: the active wire brightens and its target box steps idle -> running -> done before the next wire fires. The client itself drives the whole sequence.\n\nFacade mode: exactly one wire runs Client -> Facade; the coupling counter reads 1 regardless of subsystem count. Clicking Publish first sends a single pulse along the Client -> Facade wire (Facade box flips to running), then the Facade fans out its internal wires to each subsystem in turn on the same 500ms cadence, stepping each box idle -> running -> done; when the last finishes the Facade flips to done.\n\n'Add Watermark step' toggle: inserts a fourth subsystem box. In Direct mode a brand-new Client wire is drawn and flashes red, and the coupling counter ticks from 3 to 4 to dramatize that every caller must be rewired. In Facade mode no client wire changes; only one new internal Facade wire appears and flashes green, and the coupling counter stays at 1. Removing the toggle reverses the change. Switching modes re-lays the wires with a short transition so the contrast (fan-out from Client vs. fan-out from Facade) is visually obvious."
+    },
+    "realWorld": [
+      "Python requests library: requests.get() is a facade over urllib3 connection pools, sessions, and socket handling",
+      "SLF4J logging facade presents one API in front of multiple backend implementations such as Logback or log4j",
+      "Docker CLI: a single docker run orchestrates image pull, container create, network setup, and start"
+    ],
+    "gotcha": "Do not let the facade swell into a god object that grows a method for every caller's whim; keep it a thin coordinator. If clients need fine-grained control, leave the subsystems directly accessible rather than tunneling everything through one bloated interface."
+  },
+  {
+    "slug": "decorator",
+    "title": "Decorator",
+    "category": "Structural",
+    "oneLiner": "Wrap an object in look-alike layers that each add one behavior, stackable in any order at runtime.",
+    "problem": "Subclassing every optional-feature combination explodes into 2^n classes and locks the choice in at compile time. Decorator lets you bolt on responsibilities one layer at a time without touching the original class.",
+    "keyPoints": [
+      "Wraps the same interface, adding work before/after delegating inward",
+      "Features stack at runtime; one class per feature, not per combo",
+      "Use for optional, stackable add-ons (compression, encryption, logging)",
+      "Order matters: the outermost layer runs first in, last out"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\n\nclass DataSource(ABC):\n    @abstractmethod\n    def write(self, data: str) -> str: ...\n\n\nclass FileSource(DataSource):\n    def write(self, data: str) -> str:\n        return data\n\n\nclass SourceDecorator(DataSource):\n    def __init__(self, wrapped: DataSource):\n        self._wrapped = wrapped\n\n\nclass Compressed(SourceDecorator):\n    def write(self, data: str) -> str:\n        return f\"zip({self._wrapped.write(data)})\"\n\n\nclass Encrypted(SourceDecorator):\n    def write(self, data: str) -> str:\n        return f\"enc({self._wrapped.write(data)})\"\n\n\npipeline = Encrypted(Compressed(FileSource()))\nprint(pipeline.write(\"report\"))  # enc(zip(report))",
+    "participants": [
+      "Component (DataSource)",
+      "ConcreteComponent (FileSource)",
+      "Decorator (SourceDecorator)",
+      "ConcreteDecorator (Compressed, Encrypted)"
+    ],
+    "diagram": "classDiagram\n    class DataSource {\n        <<interface>>\n        +write(data) str\n    }\n    class FileSource {\n        +write(data) str\n    }\n    class SourceDecorator {\n        <<abstract>>\n        -wrapped: DataSource\n        +write(data) str\n    }\n    class Compressed {\n        +write(data) str\n    }\n    class Encrypted {\n        +write(data) str\n    }\n    DataSource <|.. FileSource\n    DataSource <|.. SourceDecorator\n    SourceDecorator <|-- Compressed\n    SourceDecorator <|-- Encrypted\n    SourceDecorator --> DataSource : wraps",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "DecoratorOnionStack",
+      "idea": "A decorated object is an onion: each layer wraps the core, and a call dives in through every layer, then unwinds back out.",
+      "mechanic": "Layout: a palette of three toggle chips (Encrypt, Compress, Log) on top; below, a stack of concentric rings drawn around a fixed center node labeled 'data' (the ConcreteComponent); a 'Run' button and a live output string beneath. State model: each chip has on/off; rings array is ordered outer-to-inner (e.g. [Encrypt, Compress]); a phase pointer is one of idle | descending(i) | atCore | ascending(i). Toggle a chip ON: a new ring fades in (opacity 0->1, radius grows over ~250ms) as the new OUTERMOST ring, pushing existing rings inward; toggle OFF: that ring shrinks and fades out, others expand to fill. Two small up/down arrows on each ring (or drag) swap its position with its neighbor, animating both radii in place to reorder. Click Run: a glowing pulse dot starts outside, then for phase descending(i) it travels from ring i to ring i+1 (outer to inner); each ring it enters flashes its border and the output string prepends that layer's open-tag (Encrypt -> 'enc(', Compress -> 'zip('); at atCore the center node pulses and 'data' is inserted; then ascending(i) walks back out, each ring flashes again and appends its close-tag ')'. Stepping is also available via a Step button that advances the phase pointer one ring per click so users can freeze each entering/leaving moment. Final output reads like enc(zip(data)); re-running after a reorder or toggle visibly changes both the pulse path and the string, proving order and composition matter. A speed slider (0.5x-2x) controls pulse duration."
+    },
+    "realWorld": [
+      "Python's functools.lru_cache and @property wrap a callable/attribute to add caching or access control without changing it.",
+      "Java I/O streams: BufferedInputStream and GZIPInputStream wrap a base InputStream to layer buffering and compression.",
+      "WSGI/ASGI and Express middleware stacks wrap a handler so each layer adds auth, logging, or compression around the request."
+    ],
+    "gotcha": "Decorators preserve only the shared interface, so a client that reaches for the concrete type's extra methods or runs isinstance checks on the wrapped object will break; deep wrapping also makes stack traces and debugging harder to follow."
+  },
+  {
+    "slug": "composite",
+    "title": "Composite",
+    "category": "Structural",
+    "oneLiner": "Treat a single object and a whole tree of objects through one interface, so recursion just works.",
+    "problem": "Modeling part-whole hierarchies (files/folders, org charts, UI trees) forces clients into type checks and casts to tell leaves apart from containers. Adding a new node type means touching every operation.",
+    "keyPoints": [
+      "Leaf and Composite share one Component interface; no type checks",
+      "A Composite holds children and delegates to them — arbitrary nesting",
+      "Operations recurse: leaves return a value, composites aggregate",
+      "Use when data is a tree and one op runs on a node or subtree"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\nclass Node(ABC):\n    @abstractmethod\n    def cost(self) -> float: ...\n    @abstractmethod\n    def show(self, depth=0): ...\n\nclass Item(Node):                       # Leaf\n    def __init__(self, name, price):\n        self.name, self.price = name, price\n    def cost(self):\n        return self.price\n    def show(self, depth=0):\n        print(\"  \" * depth + f\"- {self.name}: ${self.price}\")\n\nclass Box(Node):                        # Composite\n    def __init__(self, name):\n        self.name, self.children = name, []\n    def add(self, node):\n        self.children.append(node); return self\n    def cost(self):\n        return sum(c.cost() for c in self.children)\n    def show(self, depth=0):\n        print(\"  \" * depth + f\"+ {self.name}/\")\n        for c in self.children:\n            c.show(depth + 1)\n\ncart = Box(\"cart\").add(Item(\"pen\", 2)).add(\n    Box(\"kit\").add(Item(\"tape\", 3)).add(Item(\"glue\", 5)))\ncart.show()\nprint(\"total:\", cart.cost())           # total: 10",
+    "participants": [
+      "Component (Node)",
+      "Leaf (Item)",
+      "Composite (Box)",
+      "Client"
+    ],
+    "diagram": "classDiagram\n    class Node {\n        <<abstract>>\n        +cost() float\n        +show(depth)\n    }\n    class Item {\n        +cost() float\n        +show(depth)\n    }\n    class Box {\n        -children List~Node~\n        +add(Node)\n        +cost() float\n        +show(depth)\n    }\n    Node <|-- Item\n    Node <|-- Box\n    Box o-- Node : contains\n    Client --> Node : uses",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "CompositeTreeAggregator",
+      "idea": "A composite returns the same answer whether you query one leaf or an entire subtree, because cost() recurses down and sums back up through identical Component calls.",
+      "mechanic": "Layout: a fixed nested tree drawn as boxes. Box (composite) nodes are rounded rectangles holding children; Item (leaf) nodes are small rectangles each showing a price (pen 2, tape 3, glue 5). Each node has a value badge, initially blank. The tree starts: cart[ pen(2), kit[ tape(3), glue(5) ] ]. Controls: a [Query] action triggered by clicking any node, a [Step] button to advance one frame, a [Play] button to auto-run, a [Reset] button, and an [Add Item] toggle that inserts a new Item(box, 4) into the kit box. Named visual states per node, cycled by the animation engine: (1) idle - grey border, blank badge; (2) querying - the clicked node and, frame by frame, each descendant edge lights solid as the call descends (downward pulse travels parent to child along edges); (3) leaf-return - when the wave reaches an Item, that leaf flashes once and its badge fills with its own price in accent color; (4) aggregating - as control returns, each Box edge animates a value chip sliding upward from child to parent, and the Box badge increments visibly as each child's chip arrives (partial sum shown updating, e.g. kit shows 3 then 8); (5) resolved - the originally clicked node pulses and its badge locks to the final total in bold (cart -> 10). Clicking a leaf directly runs states 1,3,5 only (its own price); clicking a Box runs the full 1,2,3,4,5 cascade. [Step] advances exactly one edge/state transition so users can watch recursion order; [Play] runs all frames with ~500ms spacing; a small side panel echoes the call stack as text (cost(cart) -> cost(kit) -> cost(glue)...). Toggling [Add Item] inserts the new leaf with a slide-in, clears all badges to blank, and a caption notes 'client code unchanged'; re-running [Query] on cart now resolves to 14, proving the same interface re-flows totals with zero branching."
+    },
+    "realWorld": [
+      "The HTML/DOM and most UI toolkits (Tkinter, Qt, React) where a container widget and a single widget share a render/layout interface",
+      "Filesystem trees in os.walk and pathlib.Path, where a directory and a file expose the same traversal surface",
+      "AST node trees in Python's ast module, where a node and its child subtrees are visited uniformly"
+    ],
+    "gotcha": "Putting child-management methods (add/remove) on the shared Component interface forces leaves to implement no-op or throwing versions, breaking type safety; either keep them only on Composite (safer) or accept the uniformity-vs-safety tradeoff deliberately. Also avoid Composite for flat or non-recursive data, where it adds indirection for no gain."
+  },
+  {
+    "slug": "proxy",
+    "title": "Proxy",
+    "category": "Structural",
+    "oneLiner": "A stand-in sharing the real object's interface that intercepts calls to control or defer access.",
+    "problem": "A real object may be expensive to build, remote, or sensitive, yet clients call it directly with no chance to defer loading, check permissions, or add caching. Baking that policy into the object itself bloats it and breaks single responsibility.",
+    "keyPoints": [
+      "Same interface as the real subject; intercepts before delegating",
+      "Add lazy loading, access control, caching, or logging transparently",
+      "Variants: virtual, protection, remote, caching, smart",
+      "Use when direct access is costly or risky"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\nclass Vault(ABC):\n    @abstractmethod\n    def read(self, key: str) -> str: ...\n\nclass RealVault(Vault):\n    def read(self, key: str) -> str:\n        print(f\"[RealVault] decrypting secret for {key!r}\")\n        return f\"secret::{key}\"\n\nclass VaultProxy(Vault):\n    def __init__(self, role: str):\n        self.role = role\n        self._real = None              # RealVault built lazily\n\n    def read(self, key: str) -> str:\n        if self.role != \"admin\":\n            return f\"DENIED ({self.role})\"\n        if self._real is None:         # virtual: defer creation\n            self._real = RealVault()\n        return self._real.read(key)    # protection + delegation\n\nguest, admin = VaultProxy(\"guest\"), VaultProxy(\"admin\")\nprint(guest.read(\"db_password\"))       # blocked, RealVault never built\nprint(admin.read(\"db_password\"))       # builds RealVault, then delegates\nprint(admin.read(\"api_token\"))         # reuses the same RealVault",
+    "participants": [
+      "Subject (Vault)",
+      "RealSubject (RealVault)",
+      "Proxy (VaultProxy)",
+      "Client"
+    ],
+    "diagram": "classDiagram\n    class Subject {\n        <<interface>>\n        +read(key) str\n    }\n    class RealSubject {\n        +read(key) str\n    }\n    class Proxy {\n        -real : RealSubject\n        +read(key) str\n    }\n    class Client\n    Subject <|.. RealSubject\n    Subject <|.. Proxy\n    Proxy --> RealSubject : delegates to\n    Client --> Subject : uses",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "ProxyGatekeeperPlayground",
+      "idea": "The proxy is a gate in front of an expensive real object, deciding per-call whether to deny, build-then-delegate, or reuse, while lazy creation and access control stay visible.",
+      "mechanic": "Layout: three boxes left-to-right, Client, Proxy, and RealSubject, plus a role toggle (guest / admin) and a 'RealSubject instances created' counter starting at 0. The user sets the role toggle, then clicks 'read(key)' repeatedly. Each click fires a request token (a small filled circle) that animates left-to-right from Client into the Proxy box, which then enters exactly one of three named states shown as a labeled badge and resolved by a short animation: (1) DENIED, taken when role is guest, the Proxy badge reads DENIED, the token reverses and animates back to the Client, the RealSubject box stays greyed with a dashed 'uninstantiated' outline, and the counter does not change; (2) BUILD, taken on the first admin click, the RealSubject box transitions from dashed-grey to solid with a one-time 'decrypting' pulse (a 600ms scale/opacity throb), the counter increments to 1, then the token continues from Proxy into the now-solid RealSubject and a result chip ('secret::key') animates back to the Client; (3) REUSE, taken on every later admin click, the RealSubject box is already solid so there is no build pulse, the token passes straight through the Proxy into RealSubject and the result chip returns, while the counter stays unchanged. A 'reset' button clears the cached RealSubject (back to dashed-grey) and sets the counter to 0. Toggling role to guest after building does not destroy the RealSubject but still yields DENIED, making protection independent of lazy state. Only the active state badge is highlighted at a time; the three state names are always listed under the Proxy box so the user can see which branch each click took."
+    },
+    "realWorld": [
+      "Python's weakref.proxy and multiprocessing manager proxies that stand in for objects living elsewhere",
+      "ORM lazy relations like SQLAlchemy or Django, where related rows load only when an attribute is first touched",
+      "Reverse proxies such as Nginx and API gateways that gate, cache, and route requests to backend services"
+    ],
+    "gotcha": "A proxy must keep the exact same interface as the real subject; if it adds parameters (like a user role) to method signatures it breaks substitutability, so inject that context through the constructor instead. Also avoid stacking many proxies blindly, since each adds an indirection layer that can hide latency and complicate debugging."
+  },
+  {
+    "slug": "bridge",
+    "title": "Bridge",
+    "category": "Structural",
+    "oneLiner": "Split one class into two hierarchies (what vs how) and wire them with composition so each varies freely.",
+    "problem": "When a class varies along two independent axes, subclassing every combination explodes into M x N rigid classes. Bridge keeps the two axes as separate hierarchies linked by a reference, so each grows on its own.",
+    "keyPoints": [
+      "Abstraction holds an implementor and delegates the low-level work",
+      "M+N classes, not M*N; either side swaps independently",
+      "Use for two orthogonal axes that must combine freely",
+      "Wire the implementor by composition; reassign it at runtime"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\nclass Channel(ABC):                          # Implementor\n    @abstractmethod\n    def deliver(self, text: str) -> None: ...\n\nclass EmailChannel(Channel):                 # ConcreteImplementor\n    def deliver(self, text): print(f\"[email] {text}\")\n\nclass SmsChannel(Channel):                   # ConcreteImplementor\n    def deliver(self, text): print(f\"[sms] {text}\")\n\nclass Notification(ABC):                     # Abstraction\n    def __init__(self, channel: Channel):\n        self.channel = channel               # the bridge\n    @abstractmethod\n    def send(self, msg: str) -> None: ...\n\nclass Alert(Notification):                   # RefinedAbstraction\n    def send(self, msg): self.channel.deliver(f\"ALERT: {msg}\")\n\nalert = Alert(EmailChannel())\nalert.send(\"disk full\")                      # [email] ALERT: disk full\nalert.channel = SmsChannel()                 # rewire same object at runtime\nalert.send(\"disk full\")                      # [sms] ALERT: disk full",
+    "participants": [
+      "Abstraction",
+      "RefinedAbstraction",
+      "Implementor",
+      "ConcreteImplementor"
+    ],
+    "diagram": "classDiagram\n    class Notification {\n        +channel\n        +send(msg)\n    }\n    class Alert {\n        +send(msg)\n    }\n    class Receipt {\n        +send(msg)\n    }\n    class Channel {\n        +deliver(text)\n    }\n    class EmailChannel {\n        +deliver(text)\n    }\n    class SmsChannel {\n        +deliver(text)\n    }\n    Notification <|-- Alert\n    Notification <|-- Receipt\n    Channel <|.. EmailChannel\n    Channel <|.. SmsChannel\n    Notification --> Channel : delegates to",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "BridgeMatrixWirer",
+      "idea": "The abstraction and implementation are independent axes joined by one swappable reference, so combinations come from wiring rather than from new classes.",
+      "mechanic": "Layout: a left column of Abstraction boxes (Alert, Receipt) and a right column of Implementor boxes (Email, SMS, Push), with an SVG connector line in the gap and an output strip plus a counter panel below. State is one selected abstraction index and one selected implementor index. Click any left box: it gets a selected outline (others go dim) and the connector's left endpoint tweens over ~250ms to that box's anchor. Click any right box: same on the right, and the connector's right endpoint tweens to it; this is the Rewire action, the live bridge reference moving in place. Click Send: the connector briefly thickens and a dot travels left-to-right along it over ~400ms, then the output strip types out the delivered string for the current pair (e.g. Alert + SMS shows '[sms] ALERT: disk full'). The counter panel always shows 'classes written: 2 + 3 = 5' in normal weight beside a struck-through, greyed 'naive subclasses: 2 x 3 = 6', and both update live if the user toggles a 'add Push?' switch that adds or removes the third implementor box (5 vs 6, then 4 vs 4) so the M+N vs M*N gap is visible. No box is ever recreated on rewire; only the connector endpoint and the output animate, making the runtime swap explicit."
+    },
+    "realWorld": [
+      "Python logging: a Logger (abstraction) emits records through pluggable Handlers and Formatters (implementors), so log routing varies independently of call sites.",
+      "JDBC / Python DB-API: application code calls one cursor/connection abstraction while the concrete driver (PostgreSQL, MySQL, SQLite) is the swappable implementor.",
+      "GUI and rendering toolkits where device-independent drawing abstractions delegate to platform-specific render backends (e.g. Skia/Cairo behind a canvas API)."
+    ],
+    "gotcha": "Do not reach for Bridge when there is only one implementation or a single axis of change; the extra indirection just adds ceremony. It also differs from Adapter in intent: Adapter retrofits an incompatible interface after the fact, while Bridge is designed up front to let two hierarchies evolve in parallel."
+  },
+  {
+    "slug": "flyweight",
+    "title": "Flyweight",
+    "category": "Structural",
+    "oneLiner": "Share one immutable object across thousands of look-alikes; pass the per-instance bits in at call time.",
+    "problem": "Spawning millions of near-identical objects burns memory and GC time because each one re-stores the same heavy data. Flyweight keeps a single shared copy of the repeated state and supplies the unique part externally.",
+    "keyPoints": [
+      "Split state: intrinsic (shared, immutable) vs extrinsic (passed in)",
+      "A factory caches by intrinsic key and reuses the instance",
+      "Memory stays roughly flat as the object count explodes",
+      "Use for huge object counts differing by a few context values"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\nclass Glyph(ABC):                          # Flyweight\n    @abstractmethod\n    def stamp(self, row, col): ...\n\nclass Letter(Glyph):                       # ConcreteFlyweight: intrinsic state\n    def __init__(self, char, font, color):\n        self.char, self.font, self.color = char, font, color\n    def stamp(self, row, col):             # extrinsic state passed in\n        print(f\"{self.char}@({row},{col}) [{self.font}/{self.color}]\")\n\nclass GlyphPool:                           # FlyweightFactory\n    _cache = {}\n    @classmethod\n    def get(cls, char, font, color):\n        key = (char, font, color)\n        if key not in cls._cache:\n            cls._cache[key] = Letter(char, font, color)\n        return cls._cache[key]\n\npage = [GlyphPool.get(c, \"Mono\", \"black\") for c in \"level\"]\nfor col, g in enumerate(page):\n    g.stamp(0, col)\nprint(f\"{len(page)} chars, {len(GlyphPool._cache)} flyweights\")\nassert page[1] is page[3]                  # both 'e' share one instance",
+    "participants": [
+      "Flyweight (abstract role)",
+      "ConcreteFlyweight (stores intrinsic state)",
+      "FlyweightFactory (caches and shares instances)",
+      "Client (holds extrinsic state, passes it in)"
+    ],
+    "diagram": "classDiagram\n    class Glyph {\n        <<interface>>\n        +stamp(row, col)\n    }\n    class Letter {\n        -char\n        -font\n        -color\n        +stamp(row, col)\n    }\n    class GlyphPool {\n        -cache\n        +get(char, font, color) Glyph\n    }\n    class Client {\n        -pool\n        +render()\n    }\n    Glyph <|.. Letter\n    GlyphPool --> Glyph : creates and caches\n    Client --> GlyphPool : requests\n    Client ..> Glyph : passes extrinsic state",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "FlyweightGlyphPool",
+      "idea": "One shared glyph instance can back many on-screen characters; the factory reuses instead of allocating, so the grid grows but the pool barely does.",
+      "mechanic": "Layout: a left POOL SHELF (cached flyweight slots), a right GRID where character tiles land, and two big counters on top: 'tiles placed' and 'flyweights created'. The user has (a) a single-letter input or an on-screen mini keyboard of ~6 keys, (b) a STYLE toggle that flips the active style between 'Mono/black' and 'Serif/red', and (c) a Clear button.\n\nOn each KEYPRESS the component computes key = char + activeStyle and asks the pool. Two explicit, mutually exclusive states animate:\n- MISS (key not cached): a new shelf slot fades+scales in at the bottom of the pool shelf (the shelf visibly grows by one row), the new tile flies from the keyboard to the next empty grid cell, BOTH counters increment, and a brief 'allocate' label pulses once on the new slot.\n- HIT (key already cached): NO new slot appears; instead a glowing arrow draws from the matching existing shelf slot to the new grid tile (a short animated dash path), that slot's refcount badge ticks up (n -> n+1 with a quick bump scale), the tile lands in the grid, only 'tiles placed' increments while 'flyweights created' stays frozen (flash it gray for one beat to emphasize 'no allocation').\n\nFlipping the STYLE toggle changes the key namespace, so re-typing the same letters now forces fresh MISSES (demonstrating distinct intrinsic combinations) until those style variants are cached too. Clear empties the GRID and resets 'tiles placed' to 0 but KEEPS the pool shelf and 'flyweights created' intact, with the kept slots briefly dimming then settling, driving home that flyweights persist and are reused across renders. The punchline is the visible divergence: the grid and 'tiles placed' race upward while the shelf and 'flyweights created' plateau."
+    },
+    "realWorld": [
+      "Python interns small ints (-5..256) and short strings, returning the same cached object for equal values.",
+      "Java's Integer.valueOf / Boolean caching and the JVM string pool share immutable instances.",
+      "Game and UI engines share textures, glyph atlases, and sprite/tile types across thousands of placed instances."
+    ],
+    "gotcha": "Only works when shared state is immutable and truly repeated; if the intrinsic data must mutate per instance, or there are few distinct combinations, the factory and key-hashing overhead outweighs any memory savings."
+  },
+  {
+    "slug": "strategy",
+    "title": "Strategy",
+    "category": "Behavioral",
+    "oneLiner": "Wrap each interchangeable algorithm in its own object so the caller can swap behavior at runtime.",
+    "problem": "One class tries to do a job many ways, so it grows a sprawling if/else chain that you must reopen and risk breaking every time a new variant appears. Strategy moves each variant into its own object so behavior is selected, not branched.",
+    "keyPoints": [
+      "One interface, many implementations; the context holds one",
+      "New behavior = new class (Open/Closed), each testable alone",
+      "Swap at runtime via setter — the context delegates blindly",
+      "Use for variants of one operation, no scattered conditionals"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\nclass PricingStrategy(ABC):\n    @abstractmethod\n    def quote(self, subtotal: float) -> float: ...\n\nclass NoDiscount(PricingStrategy):\n    def quote(self, subtotal): return subtotal\n\nclass PercentOff(PricingStrategy):\n    def __init__(self, pct): self.pct = pct\n    def quote(self, subtotal): return subtotal * (1 - self.pct / 100)\n\nclass Cart:                       # Context\n    def __init__(self, pricing: PricingStrategy):\n        self.pricing = pricing\n    def total(self, subtotal):\n        return round(self.pricing.quote(subtotal), 2)\n\ncart = Cart(NoDiscount())\nprint(cart.total(100))            # 100\ncart.pricing = PercentOff(20)     # swap algorithm at runtime\nprint(cart.total(100))            # 80.0",
+    "participants": [
+      "Strategy (abstract interface)",
+      "ConcreteStrategy (e.g. NoDiscount, PercentOff)",
+      "Context (e.g. Cart)",
+      "Client"
+    ],
+    "diagram": "classDiagram\n    class PricingStrategy {\n        <<abstract>>\n        +quote(subtotal) float\n    }\n    class NoDiscount {\n        +quote(subtotal) float\n    }\n    class PercentOff {\n        -pct\n        +quote(subtotal) float\n    }\n    class Cart {\n        -pricing\n        +total(subtotal) float\n    }\n    PricingStrategy <|-- NoDiscount\n    PricingStrategy <|-- PercentOff\n    Cart o-- PricingStrategy : delegates to",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "StrategySwapBench",
+      "idea": "The context is a fixed pipe that never changes; only the plugged-in algorithm rewrites the output, so you can hot-swap behavior at runtime without touching the context.",
+      "mechanic": "Layout: a fixed Context card on the left renders the unchanging line cart.total(100) above an empty socket; three strategy chips stack on the right - NoDiscount, PercentOff(20), FlatFee(15) - each showing its formula; a result readout sits far left. Explicit states: (1) UNPLUGGED - socket outlined and empty, readout shows dashes, all chips idle. (2) PLUGGED - clicking a chip slides it left along a guide rail until it docks in the socket (CSS transform transition, ~400ms); a circular token labeled 100 then animates from the Context along the rail INTO the docked chip; the chip scales up ~1.05 and pulses one beat to signal 'computing'; a result token (100, 80, or 85) animates back to the readout and the number counts up to its final value. (3) SWAPPING - clicking a different chip while one is docked: the docked chip fades to 30 percent opacity and slides back to its column as the new chip slides in and docks, then the 100 token re-runs the journey and the readout recomputes - the Context line stays pinned and unedited the whole time to make the 'context never changes' point visceral. A persistent caption under the Context reads 'Context code unchanged' and briefly flashes a ring on each swap. Buttons: clicking any chip drives the transitions; a small Reset link returns to UNPLUGGED."
+    },
+    "realWorld": [
+      "Python's sorted() and list.sort() take a key= callable - a comparison strategy injected at call time.",
+      "Django/Werkzeug password hashers and DRF authentication classes are pluggable strategies selected by configuration.",
+      "matplotlib backends and gzip/lzma compressors expose interchangeable algorithm objects behind one interface."
+    ],
+    "gotcha": "For one or two simple variants a plain function, a dict of callables, or a lambda is lighter than a class hierarchy; full Strategy classes only pay off when variants carry their own state or proliferate. Also remember the client must still know enough to choose the right strategy."
+  },
+  {
+    "slug": "iterator",
+    "title": "Iterator",
+    "category": "Behavioral",
+    "oneLiner": "Walk a collection element by element through a uniform cursor, never touching its internal storage.",
+    "problem": "Letting clients reach into a collection's raw list leaks its structure, breaks encapsulation, and bakes one traversal style into client code. Iterator hands out a cursor object so the collection keeps control of how it is walked.",
+    "keyPoints": [
+      "The collection hands back a cursor with has_next/next",
+      "Storage and traversal vary independently; many walks at once",
+      "One API across structures, or many orders without client edits",
+      "The client loop is identical — only the iterator changes"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\n\nclass Iterator(ABC):\n    @abstractmethod\n    def has_next(self) -> bool: ...\n    @abstractmethod\n    def next(self): ...\n\n\nclass Shelf:                       # ConcreteAggregate\n    def __init__(self):\n        self._books = []\n\n    def add(self, title):\n        self._books.append(title)\n\n    def iterator(self) -> Iterator:\n        return ShelfIterator(self._books)\n\n\nclass ShelfIterator(Iterator):     # ConcreteIterator: owns the position\n    def __init__(self, books):\n        self._books, self._pos = books, 0\n\n    def has_next(self) -> bool:\n        return self._pos < len(self._books)\n\n    def next(self):\n        item = self._books[self._pos]\n        self._pos += 1\n        return item\n\n\nshelf = Shelf()\nfor t in (\"Dune\", \"Hyperion\", \"Neuromancer\"):\n    shelf.add(t)\n\nit = shelf.iterator()              # client never sees the list\nwhile it.has_next():\n    print(it.next())",
+    "participants": [
+      "Iterator (interface)",
+      "ConcreteIterator (ShelfIterator)",
+      "Aggregate (interface)",
+      "ConcreteAggregate (Shelf)",
+      "Client"
+    ],
+    "diagram": "classDiagram\n    class Iterator {\n        <<interface>>\n        +has_next() bool\n        +next() T\n    }\n    class ShelfIterator {\n        -books\n        -pos\n        +has_next() bool\n        +next() T\n    }\n    class Aggregate {\n        <<interface>>\n        +iterator() Iterator\n    }\n    class Shelf {\n        -books\n        +iterator() Iterator\n    }\n    Iterator <|.. ShelfIterator\n    Aggregate <|.. Shelf\n    Shelf ..> ShelfIterator : creates\n    ShelfIterator --> Shelf : reads",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "IteratorCursorWalk",
+      "idea": "A cursor is a separate object with its own position that advances over a collection without exposing the underlying array, and swapping the cursor changes the order while the client loop stays fixed.",
+      "mechanic": "Layout: a horizontal row of four element cells (Dune, Hyperion, Neuromancer, Foundation) is the visible collection; below it sits a dimmed 'internal storage' strip the client never reads; to the right a Consumed list (empty at start); a fixed client-loop label always reads `while has_next(): next()`; a has_next() badge shows TRUE/FALSE; a mode toggle (Forward | Reverse | Even-only) and buttons Add cursor, next(), Reset.\\n\\nStates per cursor: PARKED (token sits left of the row, pos = start), ON_CELL_i (token centered under cell i, that cell highlighted), DONE (token past the last target, badge FALSE).\\n\\nnext() click: the active cursor token (a small triangle pointing right) slides 220ms along the row from its current cell to the next cell dictated by the current mode (Forward: i+1; Reverse: i-1 from the end; Even-only: skips to the next even index). The arrived cell pulses, then a ghost copy of its label arcs up into the Consumed list (appended bottom). The has_next() badge recomputes; when no target remains the token enters DONE, badge flips to FALSE, and next() disables.\\n\\nMode toggle: clears Consumed, resets tokens to PARKED, and redraws the dotted 'path' overlay (left-to-right arrows for Forward, right-to-left for Reverse, hop arrows over odd cells for Even-only). The client-loop label never changes, visibly proving traversal varies while the client does not.\\n\\nAdd cursor: spawns a second token in a distinct color at pos = start (PARKED). A small selector picks which token next() drives; stepping one token advances only it, so both can sit on different cells simultaneously, demonstrating independent positions over one shared collection.\\n\\nReset: all tokens return to PARKED, Consumed empties, every cell refills and un-highlights, badge returns to TRUE."
+    },
+    "realWorld": [
+      "Python's iterator protocol: __iter__ and __next__ power every for-loop, with itertools building lazy iterators on top",
+      "Java's java.util.Iterator and Iterable returned by collections; C++ STL begin/end iterators",
+      "Database cursors and paginated API clients that stream rows or pages without loading the whole result set"
+    ],
+    "gotcha": "Mutating the collection while an iterator is mid-traversal causes skipped elements or stale reads; many languages throw ConcurrentModificationException. Also skip the full pattern when the language already gives you native iteration (Python's for-loop) and you need no custom ordering."
+  },
+  {
+    "slug": "observer",
+    "title": "Observer",
+    "category": "Behavioral",
+    "oneLiner": "A subject broadcasts its state changes to any number of subscribers without knowing who they are.",
+    "problem": "When one object's state must drive several others, hardwiring those dependents into it creates tight coupling and forces edits every time a new reactor appears. Observer lets the source publish changes while listeners attach and detach freely.",
+    "keyPoints": [
+      "Subject keeps a list of observers and calls update() on change",
+      "Subject and observers vary independently; new listener, no edits",
+      "Observers subscribe / unsubscribe at runtime",
+      "Use when one change must fan out to many swappable consumers"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\n\nclass Observer(ABC):\n    @abstractmethod\n    def update(self, temperature: float) -> None: ...\n\n\nclass WeatherStation:  # Subject\n    def __init__(self) -> None:\n        self._observers: list[Observer] = []\n\n    def subscribe(self, obs: Observer) -> None:\n        self._observers.append(obs)\n\n    def unsubscribe(self, obs: Observer) -> None:\n        self._observers.remove(obs)\n\n    def set_temperature(self, temp: float) -> None:\n        for obs in self._observers:  # broadcast to all\n            obs.update(temp)\n\n\nclass PhoneDisplay(Observer):\n    def update(self, temperature: float) -> None:\n        print(f\"Phone: now {temperature}C\")\n\n\nclass Logger(Observer):\n    def update(self, temperature: float) -> None:\n        print(f\"Logger: recorded {temperature}C\")\n\n\nstation = WeatherStation()\nphone, logger = PhoneDisplay(), Logger()\nstation.subscribe(phone)\nstation.subscribe(logger)\nstation.set_temperature(21.5)   # both react\nstation.unsubscribe(logger)\nstation.set_temperature(23.0)   # only phone reacts",
+    "participants": [
+      "Subject (Observable)",
+      "Observer (interface)",
+      "ConcreteSubject",
+      "ConcreteObserver"
+    ],
+    "diagram": "classDiagram\n    class Subject {\n        <<interface>>\n        +subscribe(Observer)\n        +unsubscribe(Observer)\n        +notify()\n    }\n    class Observer {\n        <<interface>>\n        +update(state)\n    }\n    class WeatherStation {\n        -observers\n        -state\n        +set_state(state)\n    }\n    class PhoneDisplay {\n        +update(state)\n    }\n    class Logger {\n        +update(state)\n    }\n    Subject <|.. WeatherStation\n    Observer <|.. PhoneDisplay\n    Observer <|.. Logger\n    WeatherStation o--> Observer : notifies",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "ObserverBroadcastBoard",
+      "idea": "A subject's state change fans out as a notification wave that reaches only the currently subscribed observers, making selective broadcast visible.",
+      "mechanic": "Layout: one Subject card on the left (a temperature value 15-30 with - / + steppers and a Publish button) wired by three SVG lines to three stacked Observer cards on the right (Phone, Logger, Alert), each with a Subscribed/Unsubscribed toggle. Explicit observer states: SUBSCRIBED (solid border, wire opaque), UNSUBSCRIBED (greyed card, wire dashed and faint), RECEIVING (the pulse is mid-flight toward it), RECEIVED (card briefly scales up ~1.08 and shows 'now {temp}C' as its last-seen value). Per action: clicking - / + animates the subject value counting to the new number and marks state as DIRTY (a small dot appears next to Publish). Clicking Publish spawns one dot per SUBSCRIBED observer that travels its wire from subject to card over ~600ms (CSS transform/offset-distance), and on arrival sets that card to RECEIVED, updates its last-seen value, and pulses it; UNSUBSCRIBED observers emit no dot and their last-seen value stays frozen and greyed. Toggling an observer flips its wire between solid and dashed instantly; doing this mid-demo and re-clicking Publish visibly skips the unsubscribed one, so the next wave reaches fewer cards. A 'Reset' link clears all last-seen values to a dash. All state is local component refs; no external libraries."
+    },
+    "realWorld": [
+      "GUI/event systems: DOM addEventListener, Qt signals and slots, JavaScript EventTarget.",
+      "Reactive streams and state: RxJS Observables, Redux store subscribe, Vue/Svelte reactivity.",
+      "Backend pub/sub and messaging: Django signals, Kafka/Redis pub-sub topics, asyncio event callbacks."
+    ],
+    "gotcha": "Naive synchronous notification can cause cascading or reentrant updates and lapsed-listener memory leaks; a slow or throwing observer also blocks the rest, so consider error isolation, async dispatch, or weak references."
+  },
+  {
+    "slug": "command",
+    "title": "Command",
+    "category": "Behavioral",
+    "oneLiner": "Wrap a request as a first-class object so you can store, queue, log, and undo it.",
+    "problem": "When callers invoke actions directly, every trigger point gets hard-wired to a specific receiver and method. You cannot queue, replay, log, or reverse those actions because they live as method calls, not data.",
+    "keyPoints": [
+      "An action becomes an object (receiver + execute/undo) — passable data",
+      "Invoker depends only on Command; new action = new class",
+      "Undo/history for free: keep executed commands on a stack",
+      "Use for queuing, scheduling, macros, or rollback"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\nclass Command(ABC):\n    @abstractmethod\n    def execute(self): ...\n    @abstractmethod\n    def undo(self): ...\n\nclass Account:                       # Receiver\n    def __init__(self): self.balance = 0\n    def add(self, n): self.balance += n\n\nclass Deposit(Command):              # ConcreteCommand\n    def __init__(self, acct, amount):\n        self.acct, self.amount = acct, amount\n    def execute(self): self.acct.add(self.amount)\n    def undo(self): self.acct.add(-self.amount)\n\nclass Teller:                        # Invoker\n    def __init__(self): self.history = []\n    def run(self, cmd):\n        cmd.execute()\n        self.history.append(cmd)\n    def undo(self):\n        if self.history: self.history.pop().undo()\n\nacct, teller = Account(), Teller()\nteller.run(Deposit(acct, 100))\nteller.run(Deposit(acct, 50))\nprint(acct.balance)   # 150\nteller.undo()\nprint(acct.balance)   # 100",
+    "participants": [
+      "Command (interface)",
+      "ConcreteCommand",
+      "Receiver",
+      "Invoker",
+      "Client"
+    ],
+    "diagram": "classDiagram\n    class Command {\n        <<interface>>\n        +execute()\n        +undo()\n    }\n    class ConcreteCommand {\n        -receiver\n        -state\n        +execute()\n        +undo()\n    }\n    class Receiver {\n        +action()\n    }\n    class Invoker {\n        -history\n        +run(Command)\n        +undo()\n    }\n    Command <|.. ConcreteCommand\n    ConcreteCommand --> Receiver : delegates to\n    Invoker --> Command : calls execute/undo\n    Client ..> ConcreteCommand : creates\n    Client ..> Invoker : configures",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "CommandUndoStackPlayground",
+      "idea": "A command is data on a stack: execute pushes a card, undo pops it, and effects reverse in exact opposite order.",
+      "mechanic": "Layout: left RECEIVER panel, center INVOKER undo-stack column, top row of trigger buttons. Receiver panel shows two widgets: a Light (a circle, state OFF=hollow/dim, ON=filled/bright) and a Thermostat (a big number, default 20). Buttons: 'Light On', 'Light Off', 'Set Temp 25', 'Undo'. Component state = { lightOn:false, temp:20, stack:[] } where each stack entry is { label, capturedPrev }.\\n\\nOn clicking any action button (250ms each): (1) a labeled Command card spawns at the button and slides+fades down into the top slot of the stack column, where existing cards shift down to make room; (2) the card top-edge shows the word 'execute'; (3) the receiver widget animates its new state in lockstep — Light circle fills and brightens (or empties), Thermostat number tween-counts from old to new value. For 'Set Temp 25' the spawned card explicitly renders a second line 'prev=20' (the captured prior temp) to prove the command stored the state it will need to reverse.\\n\\nOn clicking 'Undo' (250ms): the top card lifts up, flashes the word 'undo', and flies back off the top of the column while lower cards rise to fill the gap; simultaneously the receiver reverses using the card's captured value — Light flips back, Thermostat tween-counts back to capturedPrev. When stack is empty the column shows a dashed placeholder reading 'Nothing to undo' and the Undo button is disabled (greyed). Pushing N actions then pressing Undo N times must return the receiver exactly to its initial state, visibly demonstrating LIFO reversal.\\n\\nNamed visual states: EMPTY (placeholder + disabled Undo), PUSHING (card sliding in, receiver animating forward), POPPING (card flying out, receiver animating back). Toggle 'Show wiring': when on, draws a highlighted arrow from Invoker to the Command-interface badge on each card and dims the direct Invoker-to-Receiver path, captioned 'Invoker only knows execute()/undo()', making the indirection explicit."
+    },
+    "realWorld": [
+      "GUI frameworks: Swing Action and the QAction/QUndoStack in Qt back menu items, toolbar buttons, and editor undo/redo.",
+      "Task and job queues such as Celery or java.util.concurrent Runnable, where a unit of work is shipped as an object to run later.",
+      "Database and migration systems with up()/down() steps, e.g. Alembic or Rails migrations, which are reversible commands."
+    ],
+    "gotcha": "Do not reach for it on trivial one-off calls: a class per action is overkill versus a plain function or lambda, and reliable undo() means every command must correctly capture and restore prior state."
+  },
+  {
+    "slug": "state",
+    "title": "State",
+    "category": "Behavioral",
+    "oneLiner": "Swap an object's behavior by swapping the state object it delegates to, instead of branching on a flag.",
+    "problem": "An object that behaves differently per mode accumulates a giant if/else or switch in every method. Adding a mode means editing them all, and each mode's rules end up scattered everywhere.",
+    "keyPoints": [
+      "Context forwards each call to its state; states swap the next state",
+      "Each mode's rules in one class — no sprawling conditionals",
+      "Use when an object has a few modes with different allowed actions",
+      "Unlike Strategy: states know and trigger each other"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\n\nclass State(ABC):\n    @abstractmethod\n    def push(self, player): ...\n\n\nclass Locked(State):\n    def push(self, player):\n        print(\"Locked: press play first\")\n\n\nclass Playing(State):\n    def push(self, player):\n        print(\"Pausing\"); player.state = Paused()\n\n\nclass Paused(State):\n    def push(self, player):\n        print(\"Resuming\"); player.state = Playing()\n\n\nclass Player:                       # the Context\n    def __init__(self):\n        self.state = Locked()\n\n    def push(self):                 # same call; current state decides behavior\n        self.state.push(self)\n\n\np = Player()\np.push()                            # Locked: press play first\np.state = Paused()                  # unlock into a usable state\np.push()                            # Resuming -> now Playing\np.push()                            # Pausing  -> now Paused",
+    "participants": [
+      "State (abstract role)",
+      "ConcreteState (Locked, Playing, Paused)",
+      "Context (Player)"
+    ],
+    "diagram": "classDiagram\n    class Context {\n        -state: State\n        +request()\n    }\n    class State {\n        <<abstract>>\n        +handle(context)\n    }\n    class ConcreteStateA {\n        +handle(context)\n    }\n    class ConcreteStateB {\n        +handle(context)\n    }\n    Context o--> State : delegates\n    State <|-- ConcreteStateA\n    State <|-- ConcreteStateB\n    ConcreteStateA ..> ConcreteStateB : transitions to",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "StatePlayerMachine",
+      "idea": "A media player whose single Push button does something completely different depending on which state object is currently wired into the context.",
+      "mechanic": "Layout: a left Context box labeled 'Player.state' and a right column of three state nodes stacked top-to-bottom: Locked, Playing, Paused. Exactly one node is the active state, drawn with a filled outline; a solid arrow runs from the Context box to that active node, and the other two nodes are dimmed. Controls: one primary Push button and one secondary Unlock button, plus a Reset link. Below sits a scrolling delegated-call log. Initial visual state = Locked (arrow points at Locked, Push is enabled, Unlock enabled). On Unlock click (only meaningful from Locked): the arrow tip detaches from Locked and slides down to Paused over ~400ms easing, Paused becomes the filled active node, log appends 'context.state = Paused'. On Push click the active state's handler runs: from Locked, the Locked node briefly flashes its outline twice and a transient pill 'press play first' fades in then out (~600ms), arrow does not move, log appends 'Locked.push -> stay Locked'; from Paused, a 'Resuming' pill pops, the arrow animates from Paused up to Playing, Playing becomes active, log appends 'Paused.push -> Playing'; from Playing, a 'Pausing' pill pops, the arrow animates from Playing down to Paused, Paused becomes active, log appends 'Playing.push -> Paused'. The button label and color never change between clicks, so the moving arrow and differing log lines make it visible that identical input yields different behavior purely because the bound state object changed. Reset returns the arrow to Locked and clears the log."
+    },
+    "realWorld": [
+      "TCP connection lifecycle (LISTEN, ESTABLISHED, CLOSED) where each state handles packets differently",
+      "Editor/workflow tools: a document moving through Draft, Review, Published with per-stage allowed actions",
+      "Game and UI character controllers (idle, running, jumping) driven by per-state update logic"
+    ],
+    "gotcha": "Overkill for two simple modes or a fixed linear sequence; for a handful of values a plain enum is clearer than a class explosion. Also decide who owns transitions (states vs. context) and avoid duplicating that logic in both."
+  },
+  {
+    "slug": "template-method",
+    "title": "Template Method",
+    "category": "Behavioral",
+    "oneLiner": "Lock an algorithm's step order in a base class; let subclasses fill in only the steps that vary.",
+    "problem": "When several variants share the same multi-step workflow but differ in a few steps, copying the whole sequence into each class duplicates logic and lets the order silently drift apart. Template Method captures the skeleton once and exposes only the variable steps.",
+    "keyPoints": [
+      "A template method runs a fixed step sequence; subclasses fill steps",
+      "Shared workflow in one place; new variant = one subclass",
+      "Use when many implementations share a recipe but vary a few steps",
+      "Inheritance: the base owns control flow, steps can't be reordered"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\n\nclass Beverage(ABC):\n    def prepare(self):                # template method: fixed skeleton\n        self.boil_water()\n        self.brew()                   # abstract step\n        self.pour_in_cup()\n        if self.wants_condiments():   # hook: optional branch\n            self.add_condiments()\n\n    def boil_water(self):\n        print(\"Boiling water\")\n\n    def pour_in_cup(self):\n        print(\"Pouring into cup\")\n\n    def wants_condiments(self):       # hook with default\n        return True\n\n    @abstractmethod\n    def brew(self): ...\n    @abstractmethod\n    def add_condiments(self): ...\n\n\nclass Tea(Beverage):\n    def brew(self): print(\"Steeping the tea\")\n    def add_condiments(self): print(\"Adding lemon\")\n    def wants_condiments(self): return False   # override hook\n\n\nclass Coffee(Beverage):\n    def brew(self): print(\"Dripping coffee\")\n    def add_condiments(self): print(\"Adding sugar and milk\")\n\n\nfor drink in (Tea(), Coffee()):\n    print(f\"-- {type(drink).__name__} --\")\n    drink.prepare()",
+    "participants": [
+      "AbstractClass (defines template method + abstract steps + hooks)",
+      "Template Method (fixed-order algorithm skeleton)",
+      "ConcreteClass (implements abstract steps, may override hooks)"
+    ],
+    "diagram": "classDiagram\n    class Beverage {\n        +prepare()\n        +boil_water()\n        +pour_in_cup()\n        +wants_condiments()\n        +brew()*\n        +add_condiments()*\n    }\n    class Tea {\n        +brew()\n        +add_condiments()\n        +wants_condiments()\n    }\n    class Coffee {\n        +brew()\n        +add_condiments()\n    }\n    Beverage <|-- Tea\n    Beverage <|-- Coffee",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "TemplateMethodPipeline",
+      "idea": "The base class runs an immutable step pipeline while subclasses only swap the variable steps and toggle one hook.",
+      "mechanic": "Layout: a vertical, locked pipeline of 5 step cards in fixed order (boil_water, brew, pour_in_cup, wants_condiments?, add_condiments). A Tea / Coffee segmented toggle sits on top; a Run button and a Step button sit below. A small closed-padlock badge labeled LOCKED is pinned to the pipeline frame, and hovering any card shows a not-allowed cursor with the tooltip 'order fixed by base class' to prove cards cannot be reordered. Per-card visual states: IDLE (dim outline), ACTIVE (the running token sits on it, brightened with a pulsing ring), DONE (solid filled border), SKIPPED (faded with a strike-through). Each card also carries a fixed origin badge: INHERITED for boil_water/pour_in_cup, OVERRIDDEN for brthe abstract steps brew and add_condiments, HOOK for wants_condiments?. Toggle action (Tea vs Coffee): instantly rewrites the body text of the two OVERRIDDEN cards (brew -> 'Steeping the tea' vs 'Dripping coffee'; add_condiments -> 'Adding lemon' vs 'Adding sugar and milk') and flips the HOOK card's returned-value chip (Tea = returns FALSE, Coffee = returns TRUE); all cards reset to IDLE. Run action: a circular token spawns above boil_water and animates downward, dwelling ~450ms on each card, setting it ACTIVE then DONE in strict top-to-bottom order. At the wants_condiments? card the token reads the chip: if FALSE (Tea) the token visibly arcs around add_condiments which snaps to SKIPPED; if TRUE (Coffee) the token descends into add_condiments and marks it DONE. Step action: advances the token exactly one card per click for slow inspection, applying the same ACTIVE/DONE/SKIPPED transitions, until it reaches the end. A live transcript panel beside the pipeline appends one line per executed step (mirroring the Python print output) so the user sees the order is always boil/brew/pour/(condiments) regardless of subclass."
+    },
+    "realWorld": [
+      "Python unittest.TestCase: the framework calls setUp, the test method, then tearDown in a fixed order you fill in.",
+      "Django class-based views: dispatch() drives the request lifecycle and you override get()/post() steps.",
+      "java.io.InputStream.read(byte[]) and Collections.sort delegating to your Comparable/compareTo step."
+    ],
+    "gotcha": "Deep step hierarchies and many protected hooks create fragile base-class coupling; if variants differ wholesale rather than per-step, prefer Strategy (composition) so behavior can change at runtime without subclassing."
+  },
+  {
+    "slug": "chain-of-responsibility",
+    "title": "Chain of Responsibility",
+    "category": "Behavioral",
+    "oneLiner": "Pass a request along a line of handlers until one decides to handle it.",
+    "problem": "A single sender shouldn't hard-code which receiver handles each case, and the processing logic shouldn't collapse into one tangled block of nested if-else branches. Chain of Responsibility decouples the sender from the receiver and lets each step be added, removed, or reordered independently.",
+    "keyPoints": [
+      "Each handler holds the next; it handles or forwards the request",
+      "Sender and receivers decoupled; reorder or insert without edits",
+      "Two flavors: first-capable stops, or every handler contributes",
+      "Use when the right handler is decided at runtime"
+    ],
+    "python": "class Approver:\n    def __init__(self, name, limit):\n        self.name, self.limit = name, limit\n        self._next = None\n\n    def then(self, nxt):\n        self._next = nxt\n        return nxt  # fluent chaining: returns the link just added\n\n    def approve(self, amount):\n        if amount <= self.limit:\n            print(f\"{self.name} approved ${amount:,}\")\n        elif self._next:\n            self._next.approve(amount)          # forward down the chain\n        else:\n            print(f\"${amount:,} exceeds all limits; escalate manually\")\n\n\nlead = Approver(\"Lead\", 1_000)\nlead.then(Approver(\"Director\", 10_000)).then(Approver(\"VP\", 100_000))\n\nfor amt in (500, 5_000, 250_000):\n    lead.approve(amt)",
+    "participants": [
+      "Handler (abstract Approver)",
+      "ConcreteHandler (Lead, Director, VP)",
+      "Client (builds the chain and sends the request)",
+      "Request (the amount passed along the chain)"
+    ],
+    "diagram": "classDiagram\n    class Handler {\n        +next\n        +setNext(h)\n        +handle(req)\n    }\n    class Lead {\n        +handle(req)\n    }\n    class Director {\n        +handle(req)\n    }\n    class VP {\n        +handle(req)\n    }\n    Handler <|-- Lead\n    Handler <|-- Director\n    Handler <|-- VP\n    Handler o-- Handler : next\n    Client --> Handler : handle(req)",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "ApprovalChainTracer",
+      "idea": "A request token travels down a row of handler cards, each deciding to forward or handle, until one accepts or the token falls off the end into escalation.",
+      "mechanic": "Layout: a slider (amount $0-$300k), Submit / Step / Reset buttons, a Reorder toggle, and a horizontal row of handler cards (Lead $1k, Director $10k, VP $100k) connected by arrows, plus a result banner below. Each card has four explicit visual states: IDLE (outlined), CHECKING (border pulsing while a glowing round token sits on it), HANDLED (filled solid, token frozen on it), FORWARD (brief border flash as the token slides rightward to the next card over ~400ms). Submit (play): token spawns on the leftmost card; an interval auto-advances one hop every 600ms, setting the active card to CHECKING, then resolving to HANDLED (amount <= limit, animation stops, banner reads 'Lead approved $500') or FORWARD (token eases to the next card). If it leaves the last card, the token drops below the row into an ESCALATE state and the banner reads 'exceeds all limits; escalate'. Step: performs exactly one hop/resolution so the user controls pacing; the active card and token position update each press. Reset: clears all cards to IDLE, removes the token, clears the banner. Reorder toggle: swaps the Director and VP cards (and their limit labels) with a 300ms position transition; re-submitting the same amount now resolves at a different card, visibly demonstrating that handler order changes who responds. Only one token and one CHECKING card exist at a time; transitions are CSS-driven on left/opacity/border."
+    },
+    "realWorld": [
+      "Web framework middleware pipelines (Express, ASP.NET Core, Java Servlet filters) where each layer handles or passes the request.",
+      "Python's logging module: a LogRecord propagates up through parent loggers and their handlers.",
+      "GUI/event systems and exception handling that bubble an event or error up a hierarchy until something consumes it."
+    ],
+    "gotcha": "If no handler accepts the request and there's no terminal/default handler, it silently falls off the end and nothing happens; long or misordered chains also hurt debuggability since you can't tell up front who will respond. Avoid it when exactly one known receiver always handles the request and a direct call is simpler."
+  },
+  {
+    "slug": "visitor",
+    "title": "Visitor",
+    "category": "Behavioral",
+    "oneLiner": "Bolt new operations onto a fixed class hierarchy without ever touching those classes again.",
+    "problem": "When many unrelated operations pile onto a stable set of types, each class bloats and every new behavior forces edits across the whole hierarchy. Visitor pulls the operations out into separate classes so the types stay untouched.",
+    "keyPoints": [
+      "accept(visitor) calls back the matching visit() — double dispatch, no isinstance ladders",
+      "New operation = new visitor; the element hierarchy never changes",
+      "Use when element types are stable but operations keep growing",
+      "Each operation lives in one testable visitor, not scattered"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\nclass Node(ABC):\n    @abstractmethod\n    def accept(self, v): ...\n\nclass Num(Node):\n    def __init__(self, value): self.value = value\n    def accept(self, v): return v.num(self)\n\nclass Add(Node):\n    def __init__(self, left, right): self.left, self.right = left, right\n    def accept(self, v): return v.add(self)\n\nclass Visitor(ABC):\n    @abstractmethod\n    def num(self, n): ...\n    @abstractmethod\n    def add(self, n): ...\n\nclass Eval(Visitor):\n    def num(self, n): return n.value\n    def add(self, n): return n.left.accept(self) + n.right.accept(self)\n\nclass Print(Visitor):\n    def num(self, n): return str(n.value)\n    def add(self, n): return f\"({n.left.accept(self)} + {n.right.accept(self)})\"\n\ntree = Add(Num(3), Add(Num(4), Num(5)))\nprint(tree.accept(Print()), \"=\", tree.accept(Eval()))  # (3 + (4 + 5)) = 12",
+    "participants": [
+      "Element (Node)",
+      "ConcreteElement (Num, Add)",
+      "Visitor",
+      "ConcreteVisitor (Eval, Print)",
+      "Client"
+    ],
+    "diagram": "classDiagram\n    class Node {\n        +accept(Visitor)\n    }\n    class Num {\n        +value\n        +accept(Visitor)\n    }\n    class Add {\n        +left\n        +right\n        +accept(Visitor)\n    }\n    class Visitor {\n        +num(Num)\n        +add(Add)\n    }\n    class Eval {\n        +num(Num)\n        +add(Add)\n    }\n    class Print {\n        +num(Num)\n        +add(Add)\n    }\n    Node <|-- Num\n    Node <|-- Add\n    Visitor <|-- Eval\n    Visitor <|-- Print\n    Num ..> Visitor : accept calls num\n    Add ..> Visitor : accept calls add",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "VisitorDoubleDispatchTracer",
+      "idea": "The method that runs is chosen by two axes at once: the element's concrete type AND the selected visitor. Visitor makes that two-axis (double) dispatch the whole point.",
+      "mechanic": "Layout: left half shows a small fixed expression tree Add(Num 3, Add(Num 4, Num 5)) as clickable nodes; right half shows two visitor cards (Eval, Print), each listing its two rows num(n) and add(n). A toggle group at top selects the ACTIVE visitor (Eval | Print); the inactive card is dimmed. The user clicks any node, then presses Step (or Play to auto-advance) to walk these explicit states. (1) IDLE: nothing highlighted. (2) ELEMENT_SELECTED: the clicked node pulses (cyan ring) and emits a small accept(v) label that slides toward the active visitor card. (3) VISIT_RESOLVED: a directed arrow lands on exactly one row of the active card chosen by the node's type (Num node lights the num row, Add node lights the add row); the row flashes and shows its body. (4) For an Add node, two child accept() arrows fan back down to the left and right children, recursing through states 2-3 on each child (a small call-stack list on the side pushes/pops frames so the descent is visible). (5) RESULT_RETURNED: computed values bubble back UP the tree edges, each edge briefly labeled with the returned value, until the root shows the final result string. Reset returns to IDLE. Crucially, flipping the visitor toggle re-runs the SAME selected node and SAME steps against the other visitor: the identical Add node now routes to Print.add instead of Eval.add, and the root result morphs from 12 to (3 + (4 + 5)) -- one element, two methods, visibly proving the dispatch depends on both axes."
+    },
+    "realWorld": [
+      "Python's ast.NodeVisitor / NodeTransformer, where visit_<NodeType> methods walk a parsed syntax tree.",
+      "Compilers and linters that run multiple passes (type checking, optimization, codegen) over a stable AST.",
+      "Document/serialization toolkits that export one object model to several formats (HTML, PDF, JSON) via separate exporter visitors."
+    ],
+    "gotcha": "Visitor optimizes for adding operations, not types: every new element class forces a new method on the visitor interface and edits to all existing visitors. Avoid it when the element hierarchy changes often but the operations are few."
+  },
+  {
+    "slug": "mediator",
+    "title": "Mediator",
+    "category": "Behavioral",
+    "oneLiner": "Route peer-to-peer chatter through one hub so objects coordinate without knowing each other.",
+    "problem": "When many objects must react to each other, they accumulate direct references and tangled callbacks, turning a small change into edits across the whole web. Mediator collapses that many-to-many mesh into a star with a single coordinator at the center.",
+    "keyPoints": [
+      "Components report to one mediator instead of calling peers",
+      "Loosely coupled — each depends only on the mediator",
+      "Use for a tight cluster whose interactions keep sprawling",
+      "Unlike Observer: the mediator orchestrates, not just broadcasts"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\n\nclass Mediator(ABC):\n    @abstractmethod\n    def notify(self, sender: \"Device\", event: str) -> None: ...\n\n\nclass Device:\n    def __init__(self, name: str, hub: Mediator) -> None:\n        self.name, self.hub = name, hub\n\n\nclass MotionSensor(Device):\n    def detect(self) -> None:\n        print(f\"{self.name}: motion detected\")\n        self.hub.notify(self, \"motion\")\n\n\nclass Lamp(Device):\n    def switch(self, on: bool) -> None:\n        print(f\"{self.name}: {'ON' if on else 'OFF'}\")\n\n\nclass HomeHub(Mediator):\n    def __init__(self) -> None:\n        self.lamp = Lamp(\"Lamp\", self)\n        self.sensor = MotionSensor(\"Sensor\", self)\n\n    def notify(self, sender: Device, event: str) -> None:\n        if event == \"motion\":\n            self.lamp.switch(True)\n\n\nhub = HomeHub()\nhub.sensor.detect()  # Sensor: motion detected -> Lamp: ON",
+    "participants": [
+      "Mediator (interface)",
+      "ConcreteMediator (HomeHub)",
+      "Colleague (Device base)",
+      "ConcreteColleague (MotionSensor, Lamp)"
+    ],
+    "diagram": "classDiagram\n    class Mediator {\n        <<interface>>\n        +notify(sender, event)\n    }\n    class HomeHub {\n        -lamp\n        -sensor\n        +notify(sender, event)\n    }\n    class Device {\n        +name\n        +hub\n    }\n    class MotionSensor {\n        +detect()\n    }\n    class Lamp {\n        +switch(on)\n    }\n    Mediator <|.. HomeHub\n    Device <|-- MotionSensor\n    Device <|-- Lamp\n    Device --> Mediator : notifies\n    HomeHub --> Device : coordinates",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "MediatorStarTopology",
+      "idea": "A mediator replaces a tangled mesh of direct object-to-object links with a clean star routed through one hub, and the edge count makes the savings undeniable.",
+      "mechanic": "Five device nodes are positioned evenly on a ring around an empty center; a top toggle switches between MESH and MEDIATOR modes, and an 'edges: N' counter plus an 'add device' button sit in a side panel. In MESH mode all C(n,2) chord edges are drawn between every pair of nodes (n=5 shows edges:10); clicking any node sets it to state SENDING (node scales up) and fires a pulse dot that travels along each of its 4 direct chords, and as each pulse arrives the far node flashes state LIT for 400ms. Flipping the toggle to MEDIATOR animates every chord shrinking to zero opacity (300ms), then a Hub node fades and scales in at the center while exactly n spokes draw outward from hub to each device (edges:5). In MEDIATOR mode clicking a device runs an explicit 3-step sequence: (1) state RECEIVED, a pulse travels inward along that one spoke to the Hub; (2) state ROUTING, the Hub pulses/highlights for 300ms; (3) state DELIVERED, the Hub emits pulses outward only along the spokes it selects (e.g. its two neighbors), lighting just those target devices. The side panel always shows live counts for both topologies (mesh = n(n-1)/2, star = n) and 'saved = mesh - star'. Clicking 'add device' inserts a sixth node on the ring with a grow-in animation, and the counters tick up so the user watches mesh jump 10 to 15 while the star adds just one spoke 5 to 6."
+    },
+    "realWorld": [
+      "GUI dialog/form coordinators (a controller that enables a submit button only when fields validate) and frameworks like Qt's signal/slot wiring routed through a parent controller.",
+      "Chat servers and message brokers: a room or hub relays messages between participants who never reference each other directly.",
+      "Air traffic control and microservice orchestrators / API gateways that centralize routing instead of letting services call each other directly."
+    ],
+    "gotcha": "The mediator absorbs everyone's coupling, so it can swell into a God Object packed with conditional routing logic; if interactions are simple or stable, direct calls or an Observer are lighter than a central hub."
+  },
+  {
+    "slug": "memento",
+    "title": "Memento",
+    "category": "Behavioral",
+    "oneLiner": "Snapshot and restore an object's private state via an opaque token, without leaking its internals.",
+    "problem": "Features like undo, checkpoints, and versioning need to roll an object back to an earlier state. Exposing and copying its fields to do this breaks encapsulation and scatters fragile snapshot logic across callers.",
+    "keyPoints": [
+      "Originator packs its private fields into a Memento and unpacks them",
+      "Caretaker stacks Mementos and triggers save/restore, opaque to it",
+      "New state changes only Originator + Memento; caretaker untouched",
+      "Use for undo/redo, checkpoints, rollback with encapsulated snapshots"
+    ],
+    "python": "class Game:                                  # Originator\n    def __init__(self):\n        self.level, self.hp = 1, 100\n\n    def save(self) -> \"_GameState\":\n        return _GameState(self.level, self.hp)   # seal a snapshot\n\n    def restore(self, s: \"_GameState\") -> None:\n        self.level, self.hp = s.level, s.hp      # unpack my own state\n\n    def __repr__(self):\n        return f\"level={self.level} hp={self.hp}\"\n\n\nclass _GameState:                            # Memento, opaque to caretaker\n    def __init__(self, level, hp):\n        self.level, self.hp = level, hp\n\n\nclass Checkpoints:                           # Caretaker\n    def __init__(self):\n        self._stack: list[_GameState] = []\n\n    def save(self, g: Game):\n        self._stack.append(g.save())         # store, never inspect\n\n    def undo(self, g: Game):\n        if self._stack:\n            g.restore(self._stack.pop())\n\n\ng, cp = Game(), Checkpoints()\ncp.save(g)\ng.level, g.hp = 2, 60\nprint(\"now:\", g)            # now: level=2 hp=60\ncp.undo(g)\nprint(\"undone:\", g)         # undone: level=1 hp=100",
+    "participants": [
+      "Originator",
+      "Memento",
+      "Caretaker"
+    ],
+    "diagram": "classDiagram\n    class Originator {\n        -state\n        +save() Memento\n        +restore(m)\n    }\n    class Memento {\n        -state\n    }\n    class Caretaker {\n        -history\n        +save(orig)\n        +undo(orig)\n    }\n    Originator ..> Memento : creates\n    Caretaker --> Memento : stores opaque\n    Caretaker --> Originator : save / restore",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "MementoUndoStack",
+      "idea": "State lives in the Originator; the Caretaker only holds opaque snapshots and pops them to rewind.",
+      "mechanic": "Layout: an Originator panel on the left showing a live editor line (text plus a blinking cursor bar) and its current value, and a Caretaker stack on the right rendered as a vertical pile of cards. Four buttons: Type, Save, Undo, Peek. EDITING (default): clicking Type appends a random token to the editor text and advances the cursor; the Originator panel border pulses once to mark the mutation, and a small 'unsaved' dot appears. SAVED: clicking Save reads the Originator value, mints a Memento card that slides up from the Originator and lands on top of the stack with a brief settle bounce; the card face shows only an opaque label like 'snapshot #3 (sealed)' and never the text. RESTORING: clicking Undo lifts the top card, animates it flying leftward back into the Originator (200-300ms ease), then the editor text and cursor snap to that card's frozen value while the Originator border flashes; the card is removed from the stack. EMPTY: when the stack has no cards, Undo is disabled and greyed with the caption 'nothing to undo'. Peek is a toggle: when ON, hovering a card briefly shakes it and overlays a struck-through padlock with 'opaque -- contents hidden', visibly failing to reveal the value, reinforcing the black-box rule; toggling OFF removes the overlay. A faint label under the stack reads 'Caretaker: stores, never inspects'."
+    },
+    "realWorld": [
+      "Python's pickle / copy.deepcopy used to snapshot and reload object state",
+      "Database transaction savepoints with ROLLBACK TO restoring an earlier state",
+      "Editor and IDE undo/redo histories (text editors, Photoshop history panel)"
+    ],
+    "gotcha": "Deep snapshots of large or frequently-changing state can blow up memory; cap history depth or store diffs instead of full copies, and watch for shared mutable references that quietly alias the live object."
+  },
+  {
+    "slug": "null-object",
+    "title": "Null Object Pattern",
+    "category": "Additional Patterns",
+    "oneLiner": "Swap null for a do-nothing object that shares the interface, so callers never branch on absence.",
+    "problem": "Optional collaborators force defensive null checks at every call site; miss one and you crash at runtime. The pattern removes that scatter by making \"nothing to do\" a real, callable object.",
+    "keyPoints": [
+      "A Null variant implements the interface with no-op / safe-default methods",
+      "Callers skip null guards; the happy path stays readable",
+      "Stateless — share one immutable singleton",
+      "Use when absence is normal; avoid when missing means a bug"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\n\nclass Logger(ABC):\n    @abstractmethod\n    def log(self, msg: str) -> None: ...\n\n\nclass ConsoleLogger(Logger):\n    def log(self, msg: str) -> None:\n        print(f\"[LOG] {msg}\")\n\n\nclass NullLogger(Logger):\n    def log(self, msg: str) -> None:\n        pass  # absence of behavior is still a behavior\n\n\ndef make_logger(verbose: bool) -> Logger:\n    return ConsoleLogger() if verbose else NullLogger()\n\n\ndef run_job(logger: Logger) -> int:\n    logger.log(\"job started\")          # no `if logger:` ever needed\n    result = sum(range(5))\n    logger.log(f\"job done -> {result}\")\n    return result\n\n\nprint(\"verbose:\", run_job(make_logger(True)))\nprint(\"quiet:  \", run_job(make_logger(False)))",
+    "participants": [
+      "AbstractOperation (interface, e.g. Logger)",
+      "RealOperation (e.g. ConsoleLogger)",
+      "NullObject (e.g. NullLogger)",
+      "Client (calls through the interface, never checks for null)"
+    ],
+    "diagram": "classDiagram\n    class Logger {\n        <<abstract>>\n        +log(msg)\n    }\n    class ConsoleLogger {\n        +log(msg)\n    }\n    class NullLogger {\n        +log(msg)\n    }\n    class Client {\n        +run_job(logger)\n    }\n    Logger <|-- ConsoleLogger\n    Logger <|-- NullLogger\n    Client --> Logger",
+    "diagramType": "classDiagram",
+    "interactive": {
+      "componentName": "NullObjectCallTracer",
+      "idea": "A real object and a null object are interchangeable behind one interface; only the method body differs, never the call site.",
+      "mechanic": "Layout: a frozen client-code box on the left showing the line `logger.log(msg)` (identical, never edited), a horizontal arrow to a swappable Dependency slot in the center, and an Output console on the right. A toggle named Injected Dependency flips between two explicit states: REAL (slot shows ConsoleLogger) and NULL (slot shows NullLogger); the client box and the arrow stay visually unchanged across both. A Step button advances one call at a time through a fixed 3-message script (`job started`, `summing 0..4`, `job done -> 10`); a Play button auto-steps every 900ms; a Reset button clears the console and counter. On each step a small filled token spawns at the highlighted call-site line, glides left-to-right along the arrow (~600ms), and enters the Dependency slot. STATE REAL: the slot pulses solid, the token is absorbed, and one `[LOG] <msg>` line types into the Output console (visible side effect, console scrolls). STATE NULL: the slot shows the body `pass`, the token enters, pulses once dim, and fades to nothing -- Output console stays empty. A fixed badge reads `null checks written: 0` and a live `calls made: N` counter increments identically in both states, hammering home that the call site never branched. Toggling mid-run keeps the same step index so the user can replay the exact same call into either object and compare console output side by side."
+    },
+    "realWorld": [
+      "Python's logging.NullHandler, attached to library loggers so emitting records is a safe no-op until an app configures handlers.",
+      "Slf4j's NOPLogger / Logback NOPAppender and similar no-op logger backends in the JVM ecosystem.",
+      "Domain defaults like a Guest/anonymous user object returned from a lookup so callers treat found and not-found uniformly."
+    ],
+    "gotcha": "A null object that silently swallows everything can mask real bugs; if a missing collaborator means something is genuinely broken, prefer failing fast (raise or return Optional) instead of quietly doing nothing."
+  }
+]

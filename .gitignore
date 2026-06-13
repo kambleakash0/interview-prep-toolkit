@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# slidev build output
+dist/
+.slidev/
+
+# logs & debug
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# env
+.env
+.env.*
+!.env.example
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+shots/
+algomaster-lld/
+.claude/
+.agents/
+
+# keep pnpm-lock.yaml committed (pins exact versions) — do NOT ignore it
