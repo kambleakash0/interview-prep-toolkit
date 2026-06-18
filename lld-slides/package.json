@@ -11,7 +11,10 @@
     "export2": "slidev export deck2.md",
     "dev3": "slidev deck3.md --open",
     "build3": "slidev build deck3.md --base /lld-deck3/ --out dist/deck3",
-    "export3": "slidev export deck3.md"
+    "export3": "slidev export deck3.md",
+    "dev4": "slidev deck4.md --open",
+    "build4": "slidev build deck4.md --base /lld-deck4/ --out dist/deck4",
+    "export4": "slidev export deck4.md"
   },
   "dependencies": {
     "@slidev/cli": "52.15.2",

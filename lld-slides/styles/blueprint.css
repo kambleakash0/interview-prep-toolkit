@@ -157,6 +157,19 @@
 .slidev-layout ul.kpts li::marker { content: ''; }
 .slidev-layout ul.kpts li::before { content: '\25B8'; position: absolute; left: 0; color: var(--bp-cyan); }
 
+/* ---- deck 4: anatomy-slide right column — small, tight roles + key points so all
+   ~12 bullets fit beside the code; capped as a safety net so a dense list never runs
+   off the 980x551 canvas (mirrors how .patcode caps the code) ---- */
+.kpcol { max-height: 410px; overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
+.kpcol::-webkit-scrollbar { width: 6px; }
+.kpcol::-webkit-scrollbar-thumb { background: var(--bp-line); border-radius: 3px; }
+.kpcol .bp-eyebrow { font-size: .68rem; letter-spacing: .22em; margin-bottom: .25rem; }
+.kpcol .roles { margin: .15rem 0 .5rem; }
+.kpcol .roles li { font-size: .66rem; line-height: 1.26; margin: .14rem 0; padding-left: .95rem; }
+.kpcol .roles li::before { font-size: .66rem; }
+.kpcol ul.kpts { margin: .25rem 0 0; }
+.kpcol ul.kpts li { font-size: .66rem; line-height: 1.26; margin: .14rem 0; padding-left: .95rem; }
+
 /* interview-type rows */
 .itype { display: flex; align-items: baseline; gap: .8rem; }
 .itype .dur { font-family: "Fira Code", monospace; font-size: .68rem; color: var(--bp-cyan); border: 1px solid var(--bp-line); border-radius: 5px; padding: .1em .5em; }

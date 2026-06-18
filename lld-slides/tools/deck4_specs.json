@@ -1,0 +1,610 @@
+[
+  {
+    "slug": "ood-approach",
+    "title": "How to Approach OOD Interviews",
+    "kind": "method",
+    "access": "free",
+    "category": "Interview Method",
+    "oneLiner": "A repeatable 5-step framework — clarify, find entities, design classes, place patterns, walk use cases — that turns any \"Design X\" prompt into a defensible class diagram.",
+    "problem": "\"Design Stack Overflow\" is open-ended and the clock is 45-60 minutes. Candidates freeze, build unrequested features, or pattern-drop. Without a framework the session has no shape and no defensible deliverable.",
+    "keyPoints": [
+      "Time-box: Clarify 3-5m -> Entities 3-5m -> Classes 20-25m -> Patterns 5-7m -> Use Cases 5-10m",
+      "Step 1 scope first: features, actors, constraints, concurrency — never assume",
+      "Step 2 nouns -> 4-6 entities; verbs -> interfaces (Commentable, Votable)",
+      "Step 3 composition vs association, then add central Facade manager (Deck-3 Facade + Singleton)",
+      "Step 4 state What/Why/How; Strategy for reputation, Observer for notifications, State for status (Deck-3)",
+      "Step 5 trace vote flow (Vote -> Strategy -> Observer); edge cases: self-vote, dup, empty, floor"
+    ],
+    "python": "from abc import ABC, abstractmethod\nfrom enum import Enum\n\nclass VoteType(Enum):\n    UPVOTE = 1\n    DOWNVOTE = -1\n\n# Step 3: shared verbs -> interfaces (Question, Answer implement both)\nclass Votable(ABC):\n    @abstractmethod\n    def vote(self, user: \"User\", vt: VoteType) -> None: ...\n\n# Step 4: Strategy swaps reputation rules without touching core classes\nclass ReputationStrategy(ABC):\n    @abstractmethod\n    def delta(self, vt: VoteType, is_question: bool) -> int: ...\n\nclass StandardReputation(ReputationStrategy):\n    def delta(self, vt, is_question):\n        if vt == VoteType.UPVOTE: return 5 if is_question else 10\n        return -2\n\n# Step 5: walk the use case + trap the edge cases\ndef vote(self, voter: \"User\", vt: VoteType) -> None:\n    if voter.id == self.author.id:\n        raise ValueError(\"no self-voting\")\n    if voter.id in self.votes:\n        raise ValueError(\"no duplicate voting\")\n    self.votes[voter.id] = Vote(voter, vt)\n    self.score += self.rep.delta(vt, self.is_question)",
+    "participants": [
+      "Step 1 Clarify Requirements (ask first, scope via four buckets)",
+      "Step 2 Identify Core Entities (nouns -> 4-6 things)",
+      "Step 3 Design Classes & Interfaces (cardinality, composition vs association, Facade manager)",
+      "Step 4 Apply Design Patterns (Strategy, Observer; never name-drop)",
+      "Step 5 Walk Use Cases & Edge Cases (trace vote, trap edge cases)",
+      "StackOverflow (central Facade manager / entry-point API)"
+    ],
+    "patterns": [
+      "Facade",
+      "Strategy",
+      "Observer",
+      "Singleton",
+      "State",
+      "Factory"
+    ],
+    "interactive": {
+      "componentName": "OodInterviewCockpit",
+      "idea": "Drive one Stack Overflow design through all 5 steps on a clickable step-rail, with a running time-budget clock."
+    },
+    "interactiveSpec": "Full-width stage with a horizontal 5-step rail the learner clicks; a budget-clock chip shows time spent per step (5/5/25/7/10m). Step 1: a mock interviewer dialogue — clicking a candidate question (\"Support moderators?\", \"Include tagging?\") reveals the answer and toggles that feature in a live requirements chip-list, proving scope shrinks the build. Step 2: a requirements paragraph where clicking nouns underlines them and pops them into an entity tray, capped at the 6 core entities. Step 3: an animated class canvas where chosen entities snap into boxes; the learner clicks relationships to draw edges with a toggle that recolors composition (filled diamond) vs association (open arrow), and an \"extract interface\" button lifts shared vote()/comment() verbs onto Commentable/Votable badges attached to Question and Answer. Step 4: a pattern shelf — click Strategy/Observer/Facade onto the diagram; a correct drop highlights its target class with a What/Why/How tooltip, a forced drop flashes \"don't pattern-drop.\" Step 5: press Play to animate \"vote on an answer\" as a token traveling vote() -> Vote -> score++ -> ReputationStrategy(+10) -> author reputation -> Observer notify; toggle edge-case traps (self-vote, duplicate vote) to watch the exception fire. Aha: scope and patterns are deliberate choices, not reflexes — the framework forces both.",
+    "realWorld": [
+      "Stack Overflow Q&A core design",
+      "any FAANG 'Design X' OOD round (parking lot, elevator, vending machine)"
+    ],
+    "gotcha": "Skipping Step 1 to look fast: you build unrequested features and run out of clock. Clarify scope first, then narrate every class decision aloud — the verbal reasoning is half the grade."
+  },
+  {
+    "slug": "machine-coding-approach",
+    "title": "How to Approach Machine-Coding Interviews",
+    "kind": "method",
+    "access": "free",
+    "category": "Interview Method",
+    "oneLiner": "Run the 60-90 min round on a clock: cap design at 15-20%, then build bottom-up to a codebase that actually RUNS.",
+    "problem": "Candidates over-design and run out of time, hitting minute 50 with 500 lines that do not compile. Machine coding scores what runs, not what you describe, so you need a time-boxed pipeline that keeps the project compiling from minute 10 and trades extra features for working validation.",
+    "keyPoints": [
+      "Clock: Clarify 3-5m -> Quick Design 5-10m -> Skeleton 10-15m -> Core 40-50m -> Edge & Test 20-25m; design <= 15-20%",
+      "Noun-verb-adjective: nouns -> classes, verbs -> methods, adjectives/states -> enums",
+      "Add one manager/service Facade entry point; in-memory Map<id, entity> stores (Repository-ish)",
+      "Map by ID for lookup/dedup (O(1)), List for order; enums over boolean params",
+      "Skeleton compiles by minute 10, then bottom-up enums -> models -> service -> Main; Main is test harness",
+      "Harden by category: boundary, null/empty, dup, auth, state, order; TODO-skip, never trade validation"
+    ],
+    "python": "from enum import Enum\n\nclass VoteType(Enum):          # adjective/state -> enum\n    UPVOTE = 1\n    DOWNVOTE = -1\n\nclass Question:                # noun -> model class\n    def vote(self, voter, vote_type):          # verb -> method\n        if voter.id == self.author.id:\n            raise ValueError(\"Cannot vote on your own question\")\n        if voter.id in self.votes:             # Map dedup: O(1)\n            raise ValueError(\"Already voted\")\n        self.votes[voter.id] = Vote(voter, vote_type)\n        self.author.update_reputation(5 if vote_type is VoteType.UPVOTE else -2)\n\nclass StackOverflow:           # the manager: single entry point (Facade)\n    def __init__(self):\n        self.users: dict[int, User] = {}       # in-memory repo\n        self.questions: dict[int, Question] = {}\n\n    def ask_question(self, user, title, body, tag_names):\n        if not title or not title.strip():     # validate at the boundary\n            raise ValueError(\"Question title cannot be empty\")\n        q = Question(user, title, body, [Tag(n) for n in tag_names])\n        self.questions[q.id] = q               # register + auto-inc id\n        user.add_question(q)\n        return q",
+    "participants": [
+      "Clarify (3-5m): I/O format, validate?, graded tests, limits; MUST/NICE list",
+      "Quick Design (5-10m): noun-verb-adjective; 5-7 classes, Map-vs-List, enum-vs-boolean",
+      "Skeleton (10-15m): model fields + constructors so it COMPILES by minute 10",
+      "Core Impl (40-50m): bottom-up enums -> models -> service -> Main; TODO-skip",
+      "Edge Cases & Test (20-25m): boundary, null/empty, dup, auth, state, order; fix now",
+      "Manager/Service StackOverflow (Facade entry point, in-memory Map<id, entity>)"
+    ],
+    "interactive": {
+      "componentName": "MachineCodingClock",
+      "idea": "Drive the 90-minute clock: classify words into classes/methods/enums, watch the skeleton make it compile, trip the edge-case guards."
+    },
+    "interactiveSpec": "Full-width stage. A 90-minute timeline runs across the top, split into five colored phase segments (Clarify / Design / Skeleton / Core / Test) sized to their budgets (3-5 / 5-10 / 10-15 / 40-50 / 20-25 min). Clicking a phase reveals its checklist; ticking items advances a clock cursor and updates a live build-status panel on the right. In the Design phase, show one sentence of the Stack Overflow prompt; the learner clicks words to classify them -- nouns turn into class chips, verbs into method chips, adjectives/states into enum chips, with instant right/wrong feedback (mirrors the noun-verb-adjective trick). In Skeleton/Core a mini class-graph fills in (User, Question, Answer, Vote, StackOverflow manager) and a \"Compiles?\" badge flips green only once the skeleton is placed, demonstrating skeleton-first momentum. A budget meter glows red if design time exceeds 20% of the clock, teaching time discipline. Optional edge-case cards (self-vote, duplicate vote, empty title) can be fired and are visibly BLOCKED by the guards, reinforcing Phase 5. State: currentPhase, elapsedMin, checked items per phase, classified words, compiles flag, designOverspend flag. The aha: design is a thin slice; momentum and what RUNS win the round.",
+    "patterns": [
+      "Facade",
+      "Factory Method",
+      "Repository (in-memory Map store)"
+    ],
+    "realWorld": [
+      "Flipkart / PhonePe / Atlassian / Uber machine-coding rounds",
+      "60-90 min timed IDE build of a real system (parking lot, Stack Overflow, food delivery)"
+    ],
+    "gotcha": "Over-designing: detailed UML and every signature upfront burns the clock. Sketch 5-7 classes, start coding, refactor as you discover issues; never trade input validation for one more feature."
+  },
+  {
+    "slug": "identifying-entities",
+    "title": "Identifying Entities & Modeling Relationships",
+    "kind": "method",
+    "access": "author",
+    "category": "Interview Method",
+    "oneLiner": "Before you reach for a pattern, mine the prompt: nouns become candidate entities, verbs become behavior, then pin a typed relationship and a multiplicity on every pair.",
+    "problem": "Candidates jump straight to classes and patterns. Without a domain model, you get tight coupling, god classes, and forced patterns. The fix is a systematic noun/verb extraction pass that filters words into entities, attributes, enums, or noise, then types every relationship and sets its multiplicity, so the structure (and the patterns) fall out naturally.",
+    "keyPoints": [
+      "Mine first: nouns -> entities, verbs -> methods; before classes/patterns",
+      "Filter: merge synonyms, identity+behavior -> entity, data -> attribute, fixed sets -> enum, drop UI/IO",
+      "Type each edge: inheritance (is-a), composition (part dies), aggregation (part outlives), association (uses)",
+      "Pin multiplicity 1 / 0..* / 1..*; many-to-many -> link entity (Booking links User, Show)",
+      "Composition over inheritance: varying behavior -> Strategy/State; trees -> Composite; creation -> Factory; broadcast -> Observer",
+      "Clean model makes patterns emerge: OOAD prerequisite, not a pattern"
+    ],
+    "python": "from enum import Enum\nfrom dataclasses import dataclass, field\n\n# Prompt: \"A parking lot has levels; each level has spots.\n# A vehicle parks in a spot; status is free or occupied.\"\n\nclass SpotStatus(Enum):          # fixed categorical set -> enum\n    FREE = \"free\"\n    OCCUPIED = \"occupied\"\n\n@dataclass\nclass Spot:                      # has identity + behavior -> entity\n    spot_id: str                 # \"spot number\" is data -> attribute\n    status: SpotStatus = SpotStatus.FREE\n\n@dataclass\nclass Level:                     # owns spots; spots die with level\n    levels_id: str\n    spots: list[Spot] = field(default_factory=list)   # composition 1..*\n\n@dataclass\nclass ParkingLot:                # aggregates levels (1..*)\n    levels: list[Level] = field(default_factory=list)\n\n    def park(self, v: \"Vehicle\") -> Spot | None:      # verb -> method\n        for lvl in self.levels:\n            for s in lvl.spots:\n                if s.status is SpotStatus.FREE:\n                    s.status = SpotStatus.OCCUPIED\n                    return s\n        return None\n# \"available\", \"display board\", \"ticket print\" -> discard / attribute",
+    "participants": [
+      "Mine nouns & verbs (nouns -> entities, verbs -> methods)",
+      "Filter candidates (entity vs attribute vs enum vs discard)",
+      "Promote to enums (fold fixed value sets into Enum)",
+      "Type each relationship (inheritance / composition / aggregation / association)",
+      "Set multiplicity (1 / 0..* / 1..* per end; many-to-many -> link entity)",
+      "Validate the model (ownership, invariants, patterns emerge)"
+    ],
+    "patterns": [
+      "Strategy",
+      "State",
+      "Composite",
+      "Factory Method",
+      "Observer"
+    ],
+    "realWorld": [
+      "parking lot levels/spots/vehicles",
+      "movie booking User-Show-Booking link entity"
+    ],
+    "gotcha": "This is OOAD/domain modeling, not a GoF pattern. The patterns list is a cross-reference, not the subject. The deeper trap is over-modeling: promoting a plain attribute (ticket number) to its own entity, or building a deep is-a tree where a single collaborator field would do.",
+    "interactive": {
+      "componentName": "EntityModelingLab",
+      "idea": "Words to entities to a typed, multiplicity-labeled relationship graph, on one fixed prompt."
+    },
+    "interactiveSpec": "Full-width two-stage lab over one fixed parking-lot prompt rendered at top. Stage 1 'Mine the prompt': every noun/verb in the blurb is a clickable chip. Four drop bins below -- Entity, Attribute, Enum, Discard. The learner drags each chip into a bin; a correct drop snaps and tints green, a wrong drop shakes and shows a one-line rationale ('spot number -> Attribute, not Entity'; 'free/occupied -> Enum'; 'display board -> Discard'). A live tally bar shows the raw word-soup collapsing into a clean candidate set; a 'Next' button unlocks once the entities are correct. Stage 2 'Wire relationships': accepted entities appear as draggable boxes on a canvas. The learner drags a connector between two boxes, then a popover picks edge type (inheritance/composition/aggregation/association) and multiplicity on each end (1 / 0..* / 1..*). The canvas redraws the UML glyph live -- hollow triangle, filled diamond, hollow diamond, plain line -- with multiplicity labels. Drawing a many-to-many edge flags a teaching note: 'needs a link entity -- add Booking?'. A 'Reveal reference model' button morphs the diagram toward the canonical answer with diffs highlighted, and tags edges with their foreshadowed pattern (composition tree -> Composite, varying behavior -> Strategy/State). State: chip->bin map, entity list, edge list. The aha: words become a typed, multiplicity-labeled graph, and the patterns are already hinted at the edges."
+  },
+  {
+    "slug": "writing-clean-code",
+    "title": "Writing Clean, Extensible Code",
+    "kind": "method",
+    "access": "author",
+    "category": "Interview Method",
+    "oneLiner": "Your interview code is read more than it is run; win on names, single responsibilities, and a seam where the next requirement drops in as a new class, not an edited method.",
+    "problem": "Candidates ship working code that solves the prompt but rots the moment the interviewer says \"now add X.\" A fat if/elif on a type or state forces edits to tested core logic for every new case, and anemic objects with public fields leak invariants. The grader is judging structure, naming, and extensibility, not just a passing run, so the candidate who cannot absorb a new requirement without rewriting loses the signal even with a correct first pass.",
+    "keyPoints": [
+      "Code = communication: clear names, small methods, domain-shaped structure",
+      "One responsibility per class (SRP), one job per method; 'and' -> split",
+      "Extensibility = Open/Closed seam: new type -> new class, not new switch branch",
+      "Program to interface, inject it: depend on PaymentMethod (Strategy, DI)",
+      "Polymorphism or registry lookup over type/state conditionals (Strategy, State, Factory)",
+      "Guard clauses + domain errors over nesting; fail fast, flat happy path; don't gold-plate"
+    ],
+    "patterns": [
+      "Strategy",
+      "State",
+      "Factory Method",
+      "Dependency Injection",
+      "Template Method"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\n# DIRTY: every new type edits this tested method (closed for extension)\ndef process(kind, amount):\n    if kind == \"credit\":   ...   # charge card\n    elif kind == \"debit\":  ...\n    elif kind == \"upi\":    ...\n    else: raise ValueError(kind)  # add GiftCard -> edit here\n\n# CLEAN: new behavior = new class; the seam stays untouched (Open/Closed)\nclass PaymentMethod(ABC):\n    @abstractmethod\n    def pay(self, amount: int) -> \"Receipt\": ...\n\nclass CreditCard(PaymentMethod):\n    def pay(self, amount): return charge(self.token, amount)\n\nclass GiftCard(PaymentMethod):              # added, nothing edited\n    def pay(self, amount): return redeem(self.code, amount)\n\nclass Processor:\n    def __init__(self, method: PaymentMethod):  # inject the abstraction\n        self._method = method\n    def run(self, amount: int):\n        if amount <= 0:                     # guard clause, fail fast\n            raise InvalidAmount(amount)\n        return self._method.pay(amount)     # polymorphism, no if/elif",
+    "participants": [
+      "Names (intention-revealing identifiers)",
+      "Responsibilities (SRP: one reason to change)",
+      "Seam / Open-Closed (interface + registry for new types)",
+      "Dependency Injection (pass abstraction, never a concrete)",
+      "Polymorphism over conditionals (Strategy/State replace switch)",
+      "Guard clauses (validate at boundary, flat happy path)"
+    ],
+    "interactive": {
+      "componentName": "RefactorLab",
+      "idea": "Click 'Add: GiftCard' and watch DIRTY grow another if/elif branch while CLEAN snaps a new Strategy card onto the registry shelf with zero core lines changed."
+    },
+    "interactiveSpec": "Full-width stage, dark theme. Top bar: a DIRTY / CLEAN toggle, an \"Add type\" dropdown (GiftCard, Wallet, Crypto), and a \"Break a payment\" switch. Center splits into two synced panels. Left DIRTY panel renders process(kind, amount) as a tall if/elif body; clicking Add animates a new elif sliding into the method, a cyclomatic-complexity meter ticks up and reddens, line-count climbs, and a \"files touched\" badge holds at 1 but flashes \"modified core\". Right CLEAN panel shows a slim Processor plus a registry shelf of Strategy cards; the same Add spawns a new GiftCardStrategy card that snaps onto the shelf, Processor stays greyed at \"0 lines changed\", meter stays green. State: list of added types, mode, broken flag, per-mode complexity score. The \"Break a payment\" switch shows DIRTY throwing deep inside the nest (red stack pointer) versus CLEAN rejecting at the guard clause on entry. A bottom scoreboard animates the lesson: \"Open/Closed: new behavior = new class, not an edited method,\" with chips linking back to Deck 3 Strategy / State / Factory. Learners keep clicking Add to pile branches and watch DIRTY rot while CLEAN just grows its shelf. No code typing; clicks only.",
+    "realWorld": [
+      "payment methods (credit / debit / UPI / gift card)",
+      "discount rules and notification channels added without touching the engine"
+    ],
+    "gotcha": "Don't gold-plate a 45-minute problem: apply the Open/Closed seam at the one axis the prompt actually flexes, not a pattern for every class."
+  },
+  {
+    "slug": "choosing-design-patterns",
+    "title": "Choosing the Right Design Pattern",
+    "kind": "method",
+    "access": "author",
+    "category": "Interview Method",
+    "oneLiner": "Don't hunt for places to use a pattern; name the design pain first, then reach for the pattern that dissolves it -- and say the tradeoff out loud.",
+    "problem": "Candidates either force patterns into trivial code or avoid them and ship rigid conditionals. Interviewers score design judgement, not pattern trivia: the question is never \"which pattern do you know?\" but \"what hurts, and what removes that pain at an acceptable cost?\"",
+    "keyPoints": [
+      "Problem-first, not pattern-first: name the smell it removes",
+      "5 smells -> families: messy creation -> Factory/Abstract Factory/Builder; varying/switching behavior -> Strategy/State; one change fans out -> Observer; rigid tree/wrapping/mismatched API -> Composite/Decorator/Adapter/Facade",
+      "Say it: 'see <symptom>, add <pattern> for <benefit>, accept <cost>'",
+      "Strategy vs State: caller picks algorithm vs object drives own transitions",
+      "Factory vs Builder: hides WHICH class vs HOW it's assembled",
+      "YAGNI: if/else or plain function often wins; second axis of change justifies abstraction"
+    ],
+    "python": "SMELL_TO_PATTERN = {\n    # symptom keyword            -> pattern, one-line discriminator\n    \"growing if/else on a type\":  (\"Strategy\", \"caller picks the algorithm\"),\n    \"behavior changes by phase\":  (\"State\",    \"object drives its own transitions\"),\n    \"new Concrete() scattered\":   (\"Factory\",  \"hide WHICH class is built\"),\n    \"telescoping constructors\":   (\"Builder\",  \"hide HOW it's assembled\"),\n    \"one change updates many\":    (\"Observer\", \"fan-out via subscribe/notify\"),\n    \"wrap to add behavior live\":  (\"Decorator\",\"compose at runtime, not subclass\"),\n    \"tree of part/whole\":         (\"Composite\",\"treat leaf and group uniformly\"),\n    \"3rd-party API mismatch\":     (\"Adapter\",  \"translate the wrong interface\"),\n}\n\ndef diagnose(symptom: str) -> str:\n    pattern, why = SMELL_TO_PATTERN[symptom]\n    return f\"symptom={symptom!r} -> {pattern} ({why})\"\n\ndef justify(symptom, pattern, benefit, cost) -> str:\n    # the sentence the interviewer is listening for\n    return f\"I see {symptom}, so I add {pattern} to {benefit}, accepting {cost}.\"\n\n# YAGNI: when duplication has a single axis, skip the pattern.\ndef shipping_cost(method, weight):       # plain function beats Strategy here\n    return {\"air\": 9, \"ground\": 4}[method] * weight",
+    "participants": [
+      "Symptom (named design pain: creation, behavior, fan-out, structure, API)",
+      "Smell-to-family map (routes symptom to GoF family)",
+      "Discriminator (one-line splitter for trap pairs)",
+      "Justification sentence (symptom -> pattern -> benefit -> cost)",
+      "YAGNI guardrail (rejects pattern when if/else suffices)"
+    ],
+    "patterns": [
+      "Strategy",
+      "State",
+      "Observer",
+      "Factory Method",
+      "Abstract Factory",
+      "Builder",
+      "Decorator",
+      "Composite",
+      "Adapter",
+      "Facade",
+      "Command",
+      "Chain of Responsibility"
+    ],
+    "interactive": {
+      "componentName": "PatternDiagnosisBench",
+      "idea": "Click a real interview code smell, watch it route through a decision node to the pattern that cures it -- then flip Trap mode to disambiguate the near-misses."
+    },
+    "interactiveSpec": "Full-width stage, two columns. Left rail: a vertical stack of clickable SYMPTOM cards, each a recognizable interview moment (\"a growing if/else picks a shipping algorithm\", \"new PaymentX() is scattered everywhere\", \"an order behaves differently in OPEN vs SHIPPED vs CLOSED\", \"editing the cart must update tax, UI, and analytics\", \"a tree of files-and-folders treated uniformly\", \"a 3rd-party SDK has the wrong method names\"). Clicking a card animates a diagnostic flow: the trigger keyword in the smell text highlights, an arrow draws through a small decision node (e.g. \"who chooses the behavior? caller -> Strategy / object itself -> State\"), and lands on the matching pattern chip in the right column. The chip expands to show the one-line benefit, the tradeoff/cost, and a 4-6 line before/after Python snapshot (tangled conditional collapsing into a clean polymorphic call). A \"Trap mode\" toggle replaces direct answers with a forced choice between the classic near-misses (Strategy<->State, Factory<->Builder, Decorator<->Inheritance): the learner must pick before the reveal; a wrong pick shakes and prints the discriminator that separates them. A running counter tracks symptoms diagnosed correctly. Teaching aha: patterns are answers to named pains, not vocabulary -- correct diagnosis, not recall, is what the bench rewards.",
+    "realWorld": [
+      "narrating a design decision in a machine-coding round",
+      "refactoring a God-class if/else during a live interview"
+    ],
+    "gotcha": "Pattern-evangelism backfires: forcing Strategy onto a two-line lookup signals poor judgement. The simplest thing that removes the pain wins; let a real second axis of change earn the abstraction."
+  },
+  {
+    "slug": "handling-concurrency",
+    "title": "Handling Concurrency Scenarios",
+    "kind": "method",
+    "access": "author",
+    "category": "Interview Method",
+    "oneLiner": "Get the single-threaded logic correct first, then name the race condition and lock exactly the read-modify-write span — nothing more.",
+    "problem": "Mid-level-and-up interviews probe whether your design survives concurrent access. The classic trap is check-then-act on shared mutable state (\"seat is free, so book it\"): two threads both pass the check and double-book. Candidates either ignore it, or over-correct by locking the whole method and tanking throughput.",
+    "keyPoints": [
+      "Arrives 3 ways: stated, asked, or self-raised — self-raise signals seniority",
+      "Single-threaded correct first, sync second — never thread-safe from line one",
+      "Name it: race condition, check-then-act (read free -> write booked) not atomic",
+      "Critical section = smallest read-modify-write span; method-wide lock kills throughput",
+      "Pick tool: Lock, atomic CAS, concurrent collection, per-resource locks — GIL doesn't make check-then-act atomic",
+      "Deck 3 patterns: Singleton DCL manager, Strategy lock-vs-CAS, State AVAILABLE->HELD->BOOKED, Observer waitlist notify"
+    ],
+    "python": "import threading\n\nclass SeatManager:           # Singleton: the contended registry\n    def __init__(self):\n        self._lock = threading.Lock()\n        self._booked = set()\n\n    # BEFORE: race condition — check-then-act is not atomic\n    def book_unsafe(self, seat_id, user):\n        if seat_id not in self._booked:   # both threads pass\n            self._booked.add(seat_id)     # both write -> double-book\n            return True\n        return False\n\n    # AFTER: guard only the read-modify-write critical section\n    def book(self, seat_id, user):\n        with self._lock:                  # smallest span, not whole flow\n            if seat_id in self._booked:\n                return False              # loser fails cleanly\n            self._booked.add(seat_id)\n            return True\n    # notify waitlist / persist OUTSIDE the lock (Observer)",
+    "participants": [
+      "Trigger detection (which of 3 ways concurrency entered)",
+      "Logic-first sequencing (correct single-threaded before locks)",
+      "Race-condition naming (non-atomic check-then-act on shared state)",
+      "Critical-section scoping (minimal read-modify-write span to guard)",
+      "Tool selection (Lock vs CAS vs concurrent collection vs per-resource)",
+      "Trade-off narration (granularity, lock-ordering deadlock, optimistic vs pessimistic)"
+    ],
+    "interactive": {
+      "componentName": "SeatBookingRaceSim",
+      "idea": "Interleave two threads to double-book a seat, then flip the lock and watch the critical section serialize."
+    },
+    "interactiveSpec": "Full-width stage. Center: one seat tile (AVAILABLE) and a shared counter ticketsLeft=1. Two horizontal thread lanes (Thread A, Thread B), each showing three step tokens: READ -> CHECK -> WRITE. Controls: a Locked/Unlocked toggle, a manual Step-A / Step-B pair to hand-interleave, and a Run button that randomizes interleaving. In Unlocked mode the learner advances A to READ, B to READ (both see free), then A WRITE, B WRITE — the seat flips to DOUBLE-BOOKED, the counter drops to -1, and the overlapping READ-CHECK-WRITE spans flash red. Flip to Locked: a padlock visibly wraps only the READ-CHECK-WRITE span; when A enters, B's lane greys out labelled 'waiting on lock', then resumes, finds the seat taken, and fails cleanly (counter stays 0). A side panel renders the live Python booking method and toggles the `with self._lock:` wrapper in/out so the one-line diff maps 1:1 to the behavior change. An 'Optimistic (CAS)' variant button replaces blocking with a compare-and-swap loop: B's compare fails and it retries instead of waiting. The aha: the bug is non-atomic check-then-act, and the fix guards the smallest span — not the whole method. Dark theme, no emoji.",
+    "patterns": [
+      "Singleton (double-checked locking on the shared SeatManager)",
+      "Strategy (swap pessimistic-lock vs optimistic-CAS booking policy)",
+      "State (AVAILABLE -> HELD -> BOOKED gates legal transitions under contention)",
+      "Observer (notify waitlist/listeners after a committed atomic booking)",
+      "Producer-Consumer / Monitor (bounded buffer with condition variables as the canonical thread-safe primitive)"
+    ],
+    "realWorld": [
+      "seat/ticket booking and inventory decrement",
+      "payment idempotency and double-charge guards"
+    ],
+    "gotcha": "Don't lock the whole method — the teaching point is the small critical section. And don't trust the GIL: compound check-then-act still races; guard it explicitly."
+  },
+  {
+    "slug": "tic-tac-toe",
+    "title": "Tic Tac Toe",
+    "kind": "case-study",
+    "access": "free",
+    "category": "Games & Puzzles",
+    "oneLiner": "A 3x3 board where pluggable WinningStrategies detect victory and Observers update a shared scoreboard, so every new feature is a new class, never an edit.",
+    "problem": "Win detection has three rules (row, column, diagonal) plus future variants; the scoreboard must persist across games. Inline if-checks and direct scoreboard calls make Game a rigid god-class that you edit for every new rule or listener.",
+    "keyPoints": [
+      "Split Board (grid: place/is_full/bounds) from Cell (one Symbol) by SRP — reusable, win-highlight home",
+      "Enums for safety: Symbol(X/O/EMPTY) + one-way GameStatus state machine, terminal states never revert",
+      "Strategy (Deck 3) for wins: Row/Column/Diagonal check_win; Game iterates list, FourCorners = +1 class",
+      "Observer (Deck 3) decouples game-end: Game notifies on terminal; Scoreboard records, Game unaware",
+      "Singleton + Facade (Deck 3): TicTacToeSystem owns Scoreboard, wires observers, hides Game/Board/Cell",
+      "make_move spine: reject-if-over -> validate -> place -> check wins -> draw -> switch; lock it"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\nclass WinningStrategy(ABC):\n    @abstractmethod\n    def check_win(self, board, row, col, symbol): ...\n\nclass RowWinningStrategy(WinningStrategy):\n    def check_win(self, board, row, col, symbol):\n        return all(board.cell(row, c).symbol == symbol\n                   for c in range(board.size))\n\nclass DiagonalWinningStrategy(WinningStrategy):\n    def check_win(self, board, row, col, symbol):\n        n = board.size\n        main = all(board.cell(i, i).symbol == symbol for i in range(n))\n        anti = all(board.cell(i, n-1-i).symbol == symbol for i in range(n))\n        return main or anti          # anti-diag col = size-1-i\n\nclass Game:                          # owns Board, uses strategies+observers\n    def make_move(self, row, col):\n        with self._lock:\n            if self.status != GameStatus.IN_PROGRESS:  # 1 reject if over\n                raise InvalidMove(\"game over\")\n            if not self.board.is_empty(row, col):       # 2 validate\n                raise InvalidMove(\"occupied\")\n            sym = self.current.symbol\n            self.board.place(row, col, sym)             # 3 place\n            if any(s.check_win(self.board, row, col, sym)  # 4 check wins\n                   for s in self.strategies):\n                self.status = (GameStatus.WINNER_X if sym is Symbol.X\n                               else GameStatus.WINNER_O)\n                return self._notify()                   # observers fire\n            if self.board.is_full():                    # 5 draw\n                self.status = GameStatus.DRAW\n                return self._notify()\n            self.idx = (self.idx + 1) % 2               # 6 switch turn",
+    "participants": [
+      "Symbol / GameStatus (enums: cell value; one-way game state)",
+      "Board (owns 9 Cells; place/is_empty/is_full + bounds, no rules)",
+      "WinningStrategy (interface: check_win; Row/Column/Diagonal impls)",
+      "GameObserver (interface: update on terminal; Scoreboard implements)",
+      "Game (orchestrator: owns Board, iterates strategies, notifies)",
+      "TicTacToeSystem (Singleton Facade: owns Scoreboard, wires games)"
+    ],
+    "interactive": {
+      "componentName": "TicTacToeEngine",
+      "idea": "Play the board and watch every move flow through make_move while pluggable strategy chips fire and a decoupled Observer pushes the win to the Singleton scoreboard."
+    },
+    "interactiveSpec": "Full-width stage. Left: a playable 3x3 board; clicking an empty cell drops X, then O alternates automatically. Right: a live \"engine trace\" panel mirroring make_move as labeled steps that light in sequence on each click: reject-if-over -> validate-empty -> place -> [strategy chips] -> draw-check -> switch-turn. The strategy chips Row / Column / Diagonal each flash and report check_win = true/false in real time, making \"Game just iterates the list\" visible. On a win, the three completing cells highlight (Cell's highlight responsibility shown) and an \"Observer fired -> Scoreboard +1\" pulse animates from the board to a running scoreboard tally that persists across games. Controls: a \"FourCorners\" toggle that drops a 4th strategy chip into the list (proving win detection extends by adding a chip, not rewiring the board) and a \"Reset / New Game\" button that starts a fresh Game while the Singleton scoreboard survives. State: 9 cells, current symbol, status, strategy list, score map. Teaching aha: every move is a pipeline, strategies are interchangeable pluggable checks, and the scoreboard updates via decoupled notification rather than the board calling it directly.",
+    "patterns": [
+      "Strategy",
+      "Observer",
+      "Singleton",
+      "Facade",
+      "Command"
+    ],
+    "realWorld": [
+      "web multiplayer game server (concurrent make_move on a shared Game)",
+      "grid-based games reusing Board: Connect Four, Battleship",
+      "pluggable rule engines where each rule is a Strategy",
+      "event listeners (analytics, replay recorder) added as Observers without touching the subject"
+    ],
+    "gotcha": "Concurrency: without a lock on make_move, two web threads both read current_player_index=0, both place using the same symbol, and the turn counter wraps - corrupting the board. The lock makes each move atomic. Don't conflate WinningStrategy (checks wins) with the AI extension's MoveStrategy (picks moves) - two different Strategy uses."
+  },
+  {
+    "slug": "snake-and-ladder",
+    "title": "Snake & Ladder",
+    "kind": "case-study",
+    "access": "free",
+    "category": "Games & Puzzles",
+    "oneLiner": "Model a turn-based board game where the board is just a position-to-position map, so one O(1) lookup resolves snakes and ladders identically.",
+    "problem": "A 10x10 board with configurable snakes/ladders, N players in round-robin, dice 1-6 (roll-6 grants an extra turn), and exact-land-to-win. Naive designs store 100 cell objects and branch on \"is this a snake or a ladder?\" everywhere. The board has no per-cell content worth storing, and snake-vs-ladder is the same operation (jump start->end) with opposite direction, so the type split is noise.",
+    "keyPoints": [
+      "No cells stored: just dict{start:end}; get_final_position(p)=map.get(p,p) is O(1), snakes/ladders alike",
+      "BoardEntity base unifies Snake (start>end) / Ladder (start<end); ctor fail-fasts -> bad config dies at build",
+      "Turn rotation = deque: pop front, take turn, append back; scales to any N, zero branching",
+      "Rules in take_turn: overshoot 100 skip; hit 100 win; else apply map; roll 6 -> recursive extra (unbounded risk)",
+      "Builder (Deck-3) assembles Game via chained set_board/set_players/set_dice; build() validates all three",
+      "Game is a Facade (Deck-3): callers only play(); dice/board/queue/win-detect hidden behind one entry"
+    ],
+    "python": "from abc import ABC\nfrom collections import deque\nimport random\n\nclass BoardEntity(ABC):\n    def __init__(self, start, end):\n        self.start, self.end = start, end\n\nclass Snake(BoardEntity):\n    def __init__(self, start, end):\n        if start <= end: raise ValueError(\"head must be above tail\")\n        super().__init__(start, end)\n\nclass Ladder(BoardEntity):\n    def __init__(self, start, end):\n        if start >= end: raise ValueError(\"bottom must be below top\")\n        super().__init__(start, end)\n\nclass Board:\n    def __init__(self, size, entities):\n        self.size = size\n        self.jumps = {e.start: e.end for e in entities}\n    def get_final_position(self, pos):\n        return self.jumps.get(pos, pos)          # O(1), snake==ladder\n\nclass Game:                                      # Facade: callers use play()\n    def take_turn(self, p):\n        roll = self.dice.roll()\n        nxt = p.position + roll\n        if nxt > self.board.size: return          # overshoot -> skip\n        if nxt == self.board.size:\n            self.winner, self.status = p, \"FINISHED\"; return\n        p.position = self.board.get_final_position(nxt)\n        if roll == 6: self.take_turn(p)           # extra turn",
+    "participants": [
+      "GameStatus (enum: NOT_STARTED / RUNNING / FINISHED, no DRAW)",
+      "Player (name + mutable position, starts at 0)",
+      "BoardEntity / Snake / Ladder (base + fail-fast start vs end subclasses)",
+      "Dice (configurable min/max, roll() returns random)",
+      "Board (size + dict{start:end}; resolves both in one lookup)",
+      "Game + Game.Builder (owns board/dice/player-deque; chained setters -> validated build())"
+    ],
+    "interactive": {
+      "componentName": "SnakeLadderBoard",
+      "idea": "Play the board live: a token climbs ladders and slides down snakes via one map lookup you can watch light up."
+    },
+    "interactiveSpec": "Full-width stage. Render a 10x10 boustrophedon board numbered 1-100 (snaking left-right-up like the real game). Overlay snakes (17->7, 54->34, 62->19, 98->79) and ladders (3->38, 24->33, 42->93, 72->84) as curved connectors between their start/end cells, red for snakes, green for ladders. Three tokens: Alice, Bob, Charlie. State: each player's position, whose turn (active deque front), GameStatus, winner. Controls: a Roll button (rolls 1-6 from a Dice), a Reset, and a toggle that reveals the snakesAndLadders dict as a key->value table. On Roll: animate the active token step-by-step to next_position, then -- the aha -- a second animation snaps it along the connector to get_final_position(next), and the corresponding table row flashes, proving the board is one map lookup that treats snakes and ladders identically. A side log streams exact engine decisions (\"Bob rolled 6, climbs ladder 24->33, extra turn!\"). Demonstrate all edge cases: overshooting 100 flashes \"turn skipped\" and passes play on; landing exactly on 100 triggers a win banner; rolling a 6 visibly grants another roll (recursive take_turn). The deque view shows the front player popping and re-appending so turn rotation is legible.",
+    "patterns": [
+      "Builder",
+      "Template Method",
+      "Facade"
+    ],
+    "realWorld": [
+      "board-game engines / digital tabletop apps",
+      "round-robin scheduling with a player/job deque",
+      "rule-table lookups (position->effect maps) over branchy if/else chains"
+    ],
+    "gotcha": "Recursive take_turn on a roll of 6 is unbounded: a streak of sixes can blow the stack. Cap consecutive sixes or loop instead of recurse, and note exact-land-to-win means overshoot skips rather than caps the position."
+  },
+  {
+    "slug": "minesweeper",
+    "title": "Minesweeper",
+    "kind": "case-study",
+    "access": "author",
+    "category": "Games & Puzzles",
+    "oneLiner": "A grid of Cell state machines where the first click is always safe, mines are scattered after it, and revealing a zero-count cell floods outward to its numbered border.",
+    "problem": "Players need a board that never blows up on the first click, auto-opens the obvious empty region, and reliably knows when the game is won or lost. The naive approach (place mines at construction, store a mutable won flag, recurse blindly) breaks first-click-safety, lets state desync, and stack-overflows on a 30x16 hard board.",
+    "keyPoints": [
+      "Cell State machine: HIDDEN -> REVEALED (terminal) or HIDDEN <-> FLAGGED; flagged = reveal-immune (Deck-3 State)",
+      "Defer mines to first reveal via MinePlacementStrategy: carve safe zone, compute 0-8 counts (Strategy)",
+      "0-count reveal triggers iterative flood-fill (queue, not recursion); stops at numbers, no stack blow-up",
+      "Win/loss DERIVED each turn (revealed == total - mines, or mine revealed) — no desyncing flag",
+      "Difficulty presets (EASY/MEDIUM/HARD) are config from BoardFactory, not subclasses (Factory Method)",
+      "StatsTracker observes game-over: rolls up games/wins/losses (Observer)"
+    ],
+    "python": "from enum import Enum\n\nclass State(Enum): HIDDEN=0; REVEALED=1; FLAGGED=2\n\nclass Cell:\n    def __init__(self): self.state=State.HIDDEN; self.mine=False; self.adj=0\n\nclass Board:\n    def __init__(self, rows, cols, mines, place):\n        self.rows, self.cols, self.mines, self.place = rows, cols, mines, place\n        self.grid = [[Cell() for _ in range(cols)] for _ in range(rows)]\n        self.armed = False; self.revealed = 0\n\n    def reveal(self, r, c):                       # returns opened cells\n        if not self.armed:                        # first click: defer + carve\n            self.place(self, safe=(r, c)); self.armed = True\n        cell = self.grid[r][c]\n        if cell.state != State.HIDDEN: return []\n        if cell.mine: cell.state = State.REVEALED; return [(r, c, \"BOOM\")]\n        opened, q = [], [(r, c)]                   # iterative flood-fill\n        while q:\n            cr, cc = q.pop()\n            cur = self.grid[cr][cc]\n            if cur.state != State.HIDDEN: continue\n            cur.state = State.REVEALED; self.revealed += 1; opened.append((cr, cc))\n            if cur.adj == 0: q += self.neighbors(cr, cc)  # stop at numbered cells\n        return opened\n\n    def won(self): return self.revealed == self.rows*self.cols - self.mines",
+    "participants": [
+      "Cell (State machine: is_mine + adjacent_count + HIDDEN/REVEALED/FLAGGED)",
+      "Board (grid owner: reveal cascade, neighbor scan, derived won/lost)",
+      "MinePlacementStrategy (scatters mines after first click, carves safe zone)",
+      "BoardFactory (builds configured Board from Difficulty preset)",
+      "Game (orchestrates turns + GameStatus IN_PROGRESS/WON/LOST)",
+      "StatsTracker (Observer: rolls up games/wins/losses on game-over)"
+    ],
+    "interactive": {
+      "componentName": "MinesweeperBoard",
+      "idea": "Play it live, flip on Reveal internals, and watch the first click carve a safe zone before mines scatter and the cascade floods out."
+    },
+    "interactiveSpec": "Full-width stage: a playable board (default 9x9 / 10 mines) with an EASY/MEDIUM/HARD toggle, a right-side derived-state panel, and a Reset that re-arms placement. Left-click reveals, right-click flags; numbered cells show 1-8, mines show an icon, flags a marker. Controls: Reveal internals switch, cascade Step / Replay buttons, and a seeded RNG so each round is reproducible. State: per-cell {state, mine, adj}, armed flag, revealed count, status. Teaching aha #1 (first-click-safe): on the very first click, overlay the candidate cells, highlight the 3x3 safe zone carved around the click, then animate mines scattering into the remaining cells - proving placement is deferred, not fixed at construction. Aha #2 (cascade): revealing a 0-cell pulses each newly opened cell outward in BFS order, with a live counter \"cells opened by this cascade\" and a Step control to advance one frame at a time; the flood visibly stops at numbered cells. The panel shows revealed / safeCells, mineCount, and WIN/LOSS flipping in real time as DERIVED values (not stored), plus a games/wins/losses stat line that updates each round via the observer. Reveal internals overlays every hidden cell's true content so learners can verify the derivation.",
+    "patterns": [
+      "State (Cell: Hidden/Revealed/Flagged transitions)",
+      "Factory Method (BoardFactory builds configured boards from difficulty presets)",
+      "Strategy (MinePlacementStrategy: first-click-safe vs plain random placement)",
+      "Observer (StatsTracker subscribes to game-over events)"
+    ],
+    "realWorld": [
+      "sweeping classic Minesweeper",
+      "any reveal-cascade grid puzzle (flood fill)"
+    ],
+    "gotcha": "Placing mines at construction breaks first-click-safety, and a recursive cascade blows the stack on a 30x16 board - defer placement and flood iteratively, then derive win/loss instead of storing a flag that can desync."
+  },
+  {
+    "slug": "chess",
+    "title": "Chess",
+    "kind": "case-study",
+    "access": "author",
+    "category": "Games & Puzzles",
+    "oneLiner": "A polymorphic rules engine: six piece subclasses each generate their own moves, then a referee layer filters them by simulating the board to reject any move that leaves your king in check.",
+    "problem": "Chess has six pieces with different movement geometry, stateful special moves (castling, en passant, promotion), and global constraints (you cannot leave your own king in check) that no single piece can decide alone. Conflating piece-local geometry with global legality produces a buggy validator and a god-class board.",
+    "keyPoints": [
+      "Two-layer validation: piece-local geometry + path vs global 'leaves king in check?'",
+      "Each Piece computes own moves (Strategy + Template Method) — Open/Closed, engine untouched",
+      "Check = simulate on board copy, scan enemy moves for king square, revert. Mate = check + 0 moves; stalemate = no check + 0 moves",
+      "Pins free: simulate-then-check already rejects king-exposing moves",
+      "Special moves stateful: castling reads flags + attacks, en passant prev Move, promotion on back rank",
+      "Move (from, to, piece, captured, flags) = reversible Command — history, en passant, undo"
+    ],
+    "python": "from abc import ABC, abstractmethod\n\nclass Piece(ABC):\n    def __init__(self, color): self.color, self.moved = color, False\n    @abstractmethod\n    def get_moves(self, board, src): ...   # Strategy hook\n\nclass Bishop(Piece):\n    DIRS = [(1,1),(1,-1),(-1,1),(-1,-1)]\n    def get_moves(self, board, src):\n        moves = []\n        for dr, dc in self.DIRS:           # ray-walk until blocked\n            r, c = src.r+dr, src.c+dc\n            while board.in_bounds(r, c):\n                tgt = board[r][c]\n                if tgt is None: moves.append((r, c))\n                else:\n                    if tgt.color != self.color: moves.append((r, c))\n                    break                  # sliding pieces need path clearance\n                r, c = r+dr, c+dc\n        return moves\n\nclass RuleEngine:\n    def legal_moves(self, board, src):\n        piece = board[src.r][src.c]\n        cands = piece.get_moves(board, src)\n        return [m for m in cands if not self._leaves_king_in_check(board, src, m)]\n\n    def _leaves_king_in_check(self, board, src, dst):\n        undo = board.apply(src, dst)        # simulate on the real board\n        bad = board.is_attacked(board.king_sq(src_color := board[dst].color))\n        board.revert(undo)                  # roll back -> Move is reversible\n        return bad",
+    "participants": [
+      "Piece (abstract; declares get_moves — Strategy hook)",
+      "King/Queen/Rook/Bishop/Knight/Pawn (concrete pieces; sliders ray-walk, Pawn stateful)",
+      "Board (8x8 grid; apply/revert Move, is_attacked, king_sq)",
+      "Move (from, to, piece, captured, flags — reversible Command + history unit)",
+      "RuleEngine / MoveValidator (filters via simulate-then-check; detects check/mate/stalemate)",
+      "Game (alternates turns, applies moves, drives GameState)"
+    ],
+    "patterns": [
+      "Strategy (each Piece subclass encapsulates its own move-generation algorithm; the board delegates polymorphically)",
+      "Template Method (a base Piece shell with piece-specific get_moves hooks)",
+      "Command (Move = a reversible apply/revert operation enabling undo and history replay)",
+      "State (GameState drives what is legal and when the game ends)",
+      "Factory (board setup and pawn promotion build concrete pieces from a type)",
+      "Iterator (sliding pieces walk rays across the board until blocked)"
+    ],
+    "realWorld": [
+      "online chess engines (lichess/chess.com move validation)",
+      "game-replay and analysis tooling driven by move history",
+      "any turn-based board game with per-actor move rules and a global win-condition checker"
+    ],
+    "gotcha": "Sliding pieces (Bishop/Rook/Queen) must stop at the first blocker — path clearance — while the Knight jumps. Forgetting clearance, or validating geometry without the simulate-then-check pass (which also handles pins for free), is the classic interview failure.",
+    "interactive": {
+      "componentName": "ChessBoardPlayground",
+      "idea": "Click a piece and watch the Strategy layer emit moves while the referee greys out the ones that would leave your king in check."
+    },
+    "interactiveSpec": "Full-width playable 8x8 board, dark theme. Clicking a piece runs its get_moves and highlights destinations: green = legal, red = geometrically reachable but ILLEGAL (\"would leave your king in check\"), making the two-layer validation visible. A \"Show attack map\" toggle overlays a heatmap of every square the opponent currently attacks, so check stops being magic. A top banner reads the live GameState and flips ACTIVE -> CHECK -> CHECKMATE as moves are played; a side panel names WHICH detection fired (e.g. \"no legal moves + king attacked = checkmate\"). Two scenario buttons stage a castling and an en-passant position so learners trigger the stateful cases (un-moved flags, previous-move dependency). A growing \"Move history\" list (algebraic-ish) records each Move; an Undo button pops the last Move, proving moves are reversible Commands by reverting the board. Layout: board centered-left, control rail right (attack-map toggle, scenario buttons, Undo, reset). State: board matrix, selected square, current turn, gameState, moveHistory[], attackMapVisible. Animations: smooth piece slide on apply, fade-in highlight ring on select, banner color pulse on state change, brief red flash on an attempted illegal move. The aha: the SAME green/red split is literally the Strategy output minus the referee filter, side by side."
+  },
+  {
+    "slug": "lru-cache",
+    "title": "LRU Cache",
+    "kind": "case-study",
+    "access": "free",
+    "category": "Data Structures & Search",
+    "oneLiner": "Pair a dict with a doubly linked list so lookup, recency-bump, and eviction all stay O(1) — the textbook lesson that the right data structures beat fancy patterns.",
+    "problem": "A fixed-size cache must answer get/put in O(1) AND know which entry is least recently used so it can evict on overflow. A dict alone gives O(1) lookup but no order, so eviction degrades to O(n); a plain list gives order but O(n) to find a node. Neither structure alone suffices.",
+    "keyPoints": [
+      "Two O(1) needs: key->node lookup (dict) + recency order (DLL); compose both",
+      "Dict maps key -> *node ref*, not value -> jump straight to node, no traversal",
+      "Head = MRU, tail = LRU; access = move_to_front, overflow = remove_last, both O(1)",
+      "Dummy head/tail sentinels (Null Object) kill empty/first/last edge cases",
+      "Node stores own key so eviction can do del map[node.key]",
+      "Composition + Encapsulation, NO Strategy/Observer/Singleton; one Lock for thread-safety"
+    ],
+    "python": "class Node:\n    def __init__(self, key, value):\n        self.key, self.value = key, value\n        self.prev = self.next = None\n\nclass DoublyLinkedList:\n    def __init__(self):\n        self.head, self.tail = Node(None, None), Node(None, None)\n        self.head.next, self.tail.prev = self.tail, self.head\n\n    def add_first(self, n):           # insert after dummy head (MRU)\n        n.prev, n.next = self.head, self.head.next\n        self.head.next.prev = self.head.next = n\n\n    def remove(self, n):              # O(1): splice neighbours\n        n.prev.next, n.next.prev = n.next, n.prev\n\n    def move_to_front(self, n):\n        self.remove(n); self.add_first(n)\n\n    def remove_last(self):            # node just before dummy tail (LRU)\n        if self.tail.prev is self.head: return None\n        last = self.tail.prev; self.remove(last); return last\n\nclass LRUCache:\n    def __init__(self, capacity):\n        self.cap, self.map, self.list = capacity, {}, DoublyLinkedList()\n\n    def get(self, key):\n        node = self.map.get(key)\n        if node is None: return None\n        self.list.move_to_front(node)\n        return node.value\n\n    def put(self, key, value):\n        if key in self.map:\n            node = self.map[key]; node.value = value\n            self.list.move_to_front(node); return\n        if len(self.map) == self.cap:\n            lru = self.list.remove_last()\n            if lru: del self.map[lru.key]   # node.key needed here\n        node = Node(key, value)\n        self.list.add_first(node); self.map[key] = node",
+    "participants": [
+      "Node (key, value, prev, next; stores own key)",
+      "DoublyLinkedList (add_first, remove, move_to_front, remove_last — O(1))",
+      "dict key->Node (O(1) node-pointer lookup)",
+      "LRUCache (capacity, map, list; coordinates both, evicts)",
+      "Dummy head/tail sentinels (Null Object, erase edge cases)"
+    ],
+    "keyPointsExtra": "",
+    "patterns": [
+      "Composition (LRUCache composes dict + DoublyLinkedList)",
+      "Encapsulation / Information Hiding (callers see only get/put, never nodes)",
+      "Null Object / Sentinel (dummy head and tail nodes)",
+      "Single Responsibility (list owns ordering, dict owns lookup, cache coordinates)"
+    ],
+    "realWorld": [
+      "CPU/page caches and OS memory management",
+      "CDN and web-server response caches",
+      "functools.lru_cache (Python's stdlib decorator)",
+      "database buffer pools"
+    ],
+    "gotcha": "Forgetting to store the key in the Node makes eviction O(n) — you can't tell the dict which key to delete. Also: get must count as usage and bump to MRU, not just read.",
+    "interactive": {
+      "componentName": "LruCacheBoard",
+      "idea": "Fire put/get on a capacity-3 cache and watch move_to_front slide nodes and a capacity overflow evict the tail."
+    },
+    "interactiveSpec": "Full-width stage. Top: a capacity-3 doubly linked list rendered as a horizontal row, dummy HEAD (MRU side, left) and TAIL (LRU side, right) pinned as faded sentinels, real nodes between them showing key=value. Bottom-left: the dict as key chips, each with a dashed arrow fanning to the node it references; arrows re-route live as nodes move. Control strip: preset buttons replaying the source sequence (put a, put b, put c, get a, put d) plus free-form key/value entry for get/put. On each op the component animates the real mechanic: get-hit slides the touched node to the head with a trailing highlight; get-miss flashes \"null\"; put-at-capacity flashes the tail node red, detaches it, drops its dict chip+arrow, then slides the new node into the head as a fresh chip and arrow appear. A recency meter tints nodes warm (MRU) to cold (LRU). An op-log narrates each step (\"get a -> hit -> move_to_front\", \"put d -> at capacity -> evict b -> del map[b]\"). The teaching aha: the learner SEES eviction reference node.key to remove the dict chip, and watches both structures stay O(1) — proving why neither dict nor list alone would do. Step / auto-play replays the exact a,b,c / get a / put d eviction trace.",
+    "interactiveSpec2": ""
+  },
+  {
+    "slug": "bloom-filter",
+    "title": "Bloom Filter",
+    "kind": "case-study",
+    "access": "free",
+    "category": "Data Structures & Search",
+    "oneLiner": "A probabilistic membership filter that trades a tunable false-positive rate for massive space savings by fanning each element across k hash-derived bits.",
+    "problem": "Tracking 10M URLs in a HashSet for a safe-browsing check costs hundreds of MB. We want the same \"is this in the set?\" answer using a fraction of the space, accepting a rare \"maybe\" we never lose a \"yes\".",
+    "keyPoints": [
+      "Asymmetric: maybe present (false positive), never false negative",
+      "add -> set k bits; might_contain -> all k set, early-return False on 0",
+      "k hashes = one algo, seeds 0..k-1 make them independent (Strategy, Deck 3)",
+      "Params computed: m = -(n*ln p)/(ln2)^2, k = (m/n)*ln2; 1M @ 1% -> ~1.14MB, 7 hashes",
+      "Layers: HashStrategy, BitArray, Config (immutable), BloomFilter, Builder (Deck 3)",
+      "One mutex on add/might_contain -> atomic k bits, no half-written false negative; no delete"
+    ],
+    "python": "import math, threading\n\nclass BloomFilterConfig:\n    def __init__(self, n: int, p: float):\n        self.bit_array_size = math.ceil(-(n * math.log(p)) / (math.log(2) ** 2))\n        self.num_hash_functions = max(1, round((self.bit_array_size / n) * math.log(2)))\n\nclass BloomFilter:                       # coordinator; Builder sets n, p, strategy\n    def __init__(self, cfg, strategy):\n        self._cfg, self._strategy = cfg, strategy\n        self._bits = [False] * cfg.bit_array_size\n        self._lock = threading.Lock()\n\n    def add(self, element: str) -> None:\n        with self._lock:                 # all k bits set atomically\n            for seed in range(self._cfg.num_hash_functions):\n                self._bits[self._strategy.hash(element, seed, len(self._bits))] = True\n\n    def might_contain(self, element: str) -> bool:\n        with self._lock:\n            for seed in range(self._cfg.num_hash_functions):\n                if not self._bits[self._strategy.hash(element, seed, len(self._bits))]:\n                    return False         # one 0 => definitely not present\n            return True                  # all set => maybe present",
+    "participants": [
+      "HashStrategy (hash(element, seed, size) -> bit; Strategy pattern)",
+      "MurmurHashStrategy / FNVHashStrategy / DJB2HashStrategy (interchangeable algos)",
+      "BitArray (fixed-size bits; set/get/clear)",
+      "BloomFilterConfig (immutable; computes m, k from n, p)",
+      "BloomFilter (coordinator: BitArray + config + HashStrategy, locks ops)",
+      "BloomFilter.Builder (required n, optional rate/strategy; validates)"
+    ],
+    "patterns": [
+      "Strategy (pluggable HashStrategy: Murmur/FNV/DJB2 behind one interface, selected per use case)",
+      "Builder (BloomFilter.Builder: required n, optional FP-rate and hash strategy with defaults; computes derived m and k)"
+    ],
+    "realWorld": [
+      "URL blacklist / safe-browsing membership check",
+      "DB read-path filter to skip expensive disk lookups for absent keys"
+    ],
+    "gotcha": "Standard Bloom filters cannot delete: clearing shared bits could yank bits a still-present element relies on, breaking the no-false-negatives guarantee. Use a Counting Bloom filter (out of scope) when deletion is required.",
+    "interactive": {
+      "componentName": "BloomFilterLab",
+      "idea": "Drive add/check on a live 32-bit board, force a false positive, and slide k and FP-rate to watch m recompute and collisions shrink."
+    },
+    "interactiveSpec": "Full-width stage on a dark theme. Top bar: a text input, an Add button, a Check button, a Clear button, plus two sliders (k from 1 to 5, FP-rate from 0.5% to 20%) and a live readout of computed m via m = -(n*ln p)/(ln2)^2. Center: a row of m demo cells (default m=32, k=3), each labeled 0..m-1, dark when 0 and green when 1. State: bits[] array, a list of added words, and per-bit provenance (which word(s) set it). On Add, k labeled hash arrows fan from the word to k cells; each flips 0->1 with a brief green pulse. On Check, the k target cells light one by one; if all are already 1 the board flashes amber MAYBE PRESENT, if any is 0 it flashes red DEFINITELY NOT and stops on the first 0 to dramatize the short-circuit early return. Teaching aha: a False Positive challenge button adds 3-4 seed words, then checks a never-added word whose k bits are already covered, ringing MAYBE PRESENT while highlighting which earlier word set each contributing bit. Moving the sliders recomputes m and k via the formulas and re-renders the board live, so more bits / more hashes visibly shrink collisions. A sidebar restates the no-false-negatives guarantee and the O(k) cost."
+  },
+  {
+    "slug": "search-autocomplete",
+    "title": "Search Autocomplete (Typeahead)",
+    "kind": "case-study",
+    "access": "author",
+    "category": "Data Structures & Search",
+    "oneLiner": "A Trie walks the prefix once in O(L), then a pluggable ranking Strategy picks the top-N completions from its subtree.",
+    "problem": "As a user types, suggest the best-matching completions in real time. A flat list or HashMap-of-prefixes scales with dictionary size; we need prefix lookup that costs O(prefix length) regardless of how many words exist, plus ranking the interviewer can reconfigure (alphabetical vs frequency) and a configurable result limit.",
+    "keyPoints": [
+      "Trie spine: node per char, O(L) walk to prefix, DFS-collect subtree -- size-independent, shared prefixes save memory",
+      "Ranking = Strategy (Deck 3): Alphabetical/Frequency swappable, Trie untouched",
+      "Frequency learned on insert: bump counter at terminal node; node holds word + freq",
+      "Top-N bounded: heapq.nlargest(k) partial sort, not full subtree sort",
+      "AutocompleteSystem = Facade over Trie + ranker + limit; children form Composite, DFS = Iterator",
+      "Normalize up-front: lowercase insert/query, English-only; delete/update out of scope"
+    ],
+    "python": "from abc import ABC, abstractmethod\nfrom heapq import nlargest\n\nclass TrieNode:\n    def __init__(self):\n        self.children: dict[str, \"TrieNode\"] = {}\n        self.is_word = False\n        self.frequency = 0\n\nclass RankingStrategy(ABC):\n    @abstractmethod\n    def rank(self, cands, k): ...  # -> [(word, freq)]\n\nclass FrequencyRanking(RankingStrategy):\n    def rank(self, cands, k):\n        return nlargest(k, cands, key=lambda c: (c[1], c[0]))\n\nclass AlphabeticalRanking(RankingStrategy):\n    def rank(self, cands, k):\n        return sorted(cands)[:k]\n\nclass AutocompleteSystem:                      # Facade\n    def __init__(self, ranker, limit=10):\n        self.root, self.ranker, self.limit = TrieNode(), ranker, limit\n\n    def insert(self, word):\n        node = self.root\n        for ch in word.lower():\n            node = node.children.setdefault(ch, TrieNode())\n        node.is_word, node.frequency = True, node.frequency + 1\n\n    def suggest(self, prefix, k=None):\n        node = self.root\n        for ch in prefix.lower():              # O(L) walk\n            if ch not in node.children:\n                return []\n            node = node.children[ch]\n        cands = self._collect(node, prefix.lower())\n        return self.ranker.rank(cands, k or self.limit)\n\n    def _collect(self, node, path):            # DFS / Iterator\n        out = [(path, node.frequency)] if node.is_word else []\n        for ch, child in node.children.items():\n            out += self._collect(child, path + ch)\n        return out",
+    "participants": [
+      "TrieNode (children map + is_word + frequency; Composite node)",
+      "AutocompleteSystem (Facade: owns Trie root, ranker, default limit)",
+      "RankingStrategy (ABC: swappable ranking contract)",
+      "FrequencyRanking / AlphabeticalRanking (concrete Strategies over candidates)",
+      "insert() / suggest() (write bumps freq; read O(L) walk then rank)",
+      "_collect() (DFS Iterator over completions under prefix)"
+    ],
+    "interactive": {
+      "componentName": "TrieTypeaheadExplorer",
+      "idea": "Type a prefix, watch the O(L) Trie walk and subtree DFS, then toggle the ranking Strategy to re-rank in place."
+    },
+    "interactiveSpec": "Full-width stage. Left third: a text input where the learner types a prefix character-by-character, plus a Strategy toggle (Alphabetical / Frequency), a k-limit slider (1-10), and an \"insert word\" field. Right two-thirds: an animated Trie diagram (nodes = circles, terminal nodes ringed, frequency badge on each word node). As each character is typed, the matching edge/node highlights and an \"O(L) steps\" counter ticks; on reaching the prefix node its whole subtree lights up and a DFS sweep pulses nodes in visit order, dropping each found completion into a bottom suggestion panel. The panel shows ranked top-N chips with frequency badges. The teaching aha: flipping the Strategy toggle instantly re-orders the suggestion list WITHOUT re-walking or re-collecting the Trie (counter stays put) -- proving ranking is decoupled from traversal. Dragging k grows/shrinks the list live, and a small note shows \"heapq.nlargest(k)\" vs \"full sort\" so the bounded-top-k point lands. \"Insert word\" grows a new branch with an animated edge and increments the terminal frequency counter (re-inserting the same word bumps the badge). Seed dictionary: apple, application, apply, app, banana, band, bank, cat, car, card, care, dog, door, down, search, sea, seal, season.",
+    "patterns": [
+      "Strategy (RankingStrategy: alphabetical vs frequency, swap without touching the Trie)",
+      "Facade (AutocompleteSystem wraps Trie + ranker + limit)",
+      "Composite (TrieNode tree of children)",
+      "Iterator (DFS traversal collecting completions in a subtree)"
+    ],
+    "realWorld": [
+      "Google / YouTube search box typeahead",
+      "IDE code completion",
+      "e-commerce product search suggestions"
+    ],
+    "gotcha": "Don't fully sort the whole subtree -- it can be huge; collect then heapq.nlargest(k). Per-node cached top-k is a precompute trade-off; mention it as an extension but keep the core simple."
+  },
+  {
+    "slug": "search-engine",
+    "title": "Simple Search Engine",
+    "kind": "case-study",
+    "access": "author",
+    "category": "Data Structures & Search",
+    "oneLiner": "Flip the document-to-word map inside out into an inverted index, then rank the hits by term frequency.",
+    "problem": "Searching a corpus by scanning every document on each query is O(corpus) per lookup and does not scale. We need fast keyword lookup, case-insensitive matching, and relevance ranking, while keeping ranking swappable and the wiring hidden behind a clean facade.",
+    "keyPoints": [
+      "Inverted index: term -> postings (docId, freq); lookup O(1), no full scan",
+      "One Tokenizer for index + query (split + lowercase); shared vocabulary",
+      "Ranking = pluggable Strategy: swap TF for TF-IDF/BM25, index untouched",
+      "SearchEngine is a Facade over tokenizer + index + strategy; walk postings via Iterator",
+      "Multi-word: union/intersect postings, then strategy scores + sorts descending",
+      "Non-goals: in-memory, exact case-insensitive, no crawl/stem/stop-word/fuzzy"
+    ],
+    "python": "import math, re\nfrom collections import defaultdict\n\nclass Tokenizer:\n    def tokenize(self, text):\n        return re.findall(r\"[a-z0-9]+\", text.lower())\n\nclass InvertedIndex:\n    def __init__(self):\n        self.postings = defaultdict(lambda: defaultdict(int))  # term->{doc:freq}\n        self.docs = set()\n\n    def add(self, doc_id, terms):\n        self.docs.add(doc_id)\n        for t in terms:\n            self.postings[t][doc_id] += 1\n\nclass TfIdfRanking:                      # Strategy: swap for TermFrequencyRanking\n    def score(self, idx, term, doc_id):\n        tf = idx.postings[term][doc_id]\n        idf = math.log(len(idx.docs) / (1 + len(idx.postings[term])))\n        return tf * idf\n\nclass SearchEngine:                      # Facade over tokenizer + index + ranker\n    def __init__(self, ranking):\n        self.tok, self.idx, self.rank = Tokenizer(), InvertedIndex(), ranking\n\n    def index(self, doc_id, text):\n        self.idx.add(doc_id, self.tok.tokenize(text))\n\n    def search(self, query):\n        scores = defaultdict(float)\n        for term in self.tok.tokenize(query):\n            for doc_id in self.idx.postings.get(term, {}):\n                scores[doc_id] += self.rank.score(self.idx, term, doc_id)\n        return sorted(scores, key=scores.get, reverse=True)",
+    "participants": [
+      "Tokenizer (text -> lowercase term stream; shared)",
+      "InvertedIndex (term -> postings docId:freq; O(1)-lookup core)",
+      "Posting (one docId:freq cell in postings list)",
+      "RankingStrategy (pluggable scorer: TermFrequency vs TfIdf)",
+      "SearchEngine (Facade over tokenizer + index + strategy)",
+      "SearchResult (docId + relevance score, returned sorted)"
+    ],
+    "patterns": [
+      "Strategy",
+      "Facade",
+      "Iterator",
+      "Builder",
+      "Singleton"
+    ],
+    "interactive": {
+      "componentName": "InvertedIndexSearchBoard",
+      "idea": "Index preset docs, fire queries, watch postings light up and result bars re-rank as you toggle TF vs TF-IDF."
+    },
+    "interactiveSpec": "Full-width stage, three columns. LEFT: 4-5 short preset documents (cards with id + text); clicking a card highlights it. CENTER: an inverted-index table, term -> postings cells. Pressing \"Index\" animates tokens flying out of each doc into the table, with per-cell docId:freq counts ticking up and a frequency heat tint (darker = higher freq). RIGHT: a search box plus preset query chips (\"search\", \"engine ranking\", \"index\"). Clicking a chip lights the matching postings rows, draws connector lines from those cells back to their source docs, and renders a ranked horizontal bar chart of result scores. A Strategy toggle (Term-Frequency vs TF-IDF) re-scores the SAME candidate set and visibly animates the bars re-sorting, while the index table stays unchanged. State: docs[], invertedIndex{term:{doc:freq}}, activeQuery, strategy, scores{}. Preset docs are chosen so TF and TF-IDF disagree on ordering for at least one query (a rare term outranks a common one), so the re-sort is dramatic. The teaching aha: the index is built once and never changes; only the pluggable ranking Strategy decides order. A small caption surfaces the active formula (tf vs tf*log(N/df)) so learners connect the animated bars to the scoring math.",
+    "realWorld": [
+      "Elasticsearch / Lucene segment indexes",
+      "in-app full-text document search"
+    ],
+    "gotcha": "Forgetting to reuse one tokenizer: if query and corpus normalize differently, exact matches silently miss. Also, term-frequency alone over-rewards long documents - reach for TF-IDF/BM25 once relevance matters."
+  }
+]
