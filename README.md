@@ -17,7 +17,7 @@ Requires [Node.js](https://nodejs.org) **20.12+** and [pnpm](https://pnpm.io) (e
 ```bash
 cd lld-slides
 pnpm install
-pnpm dev      # Deck 1 (Foundations) — also: pnpm dev2, pnpm dev3
+pnpm dev      # Deck 1 (Foundations) — also: pnpm dev2, dev3, dev4
 ```
 
 Each deck opens at http://localhost:3030. Full instructions, the deck list, and keyboard shortcuts are in [`lld-slides/README.md`](lld-slides/README.md).

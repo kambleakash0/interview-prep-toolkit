@@ -1,6 +1,6 @@
 # LLD Teaching Decks
 
-Three interactive slide decks for teaching **Low-Level Design** — built with [Slidev](https://sli.dev). Every concept is a live, clickable demo (animated diagrams, steppable state machines, runnable-looking flows) in a dark "blueprint" theme, with Python examples throughout.
+Four interactive slide decks for teaching **Low-Level Design** — built with [Slidev](https://sli.dev). Every concept is a live, clickable demo (animated diagrams, steppable state machines, runnable-looking flows) in a dark "blueprint" theme, with Python examples throughout.
 
 ## What's inside
 
@@ -9,8 +9,9 @@ Three interactive slide decks for teaching **Low-Level Design** — built with [
 | **1 - Foundations** | `pnpm dev` | LLD intro, OOP fundamentals, class relationships |
 | **2 - Principles & UML** | `pnpm dev2` | Design principles, SOLID, UML diagrams |
 | **3 - Design Patterns** | `pnpm dev3` | All 30 patterns: Creational, Structural, Behavioral, Additional |
+| **4 - Cracking the LLD Interview** | `pnpm dev4` | The interview method, then worked case studies: games, data structures & search |
 
-Each pattern/concept gets a code slide plus a full-width interactive component you can click through. Practice prompts live alongside the decks in [`deck1_exercises.md`](deck1_exercises.md) and [`deck2_exercises.md`](deck2_exercises.md).
+Each pattern/concept/case study gets a code slide plus a full-width interactive component you can click through. Practice prompts live alongside the decks in [`deck1_exercises.md`](deck1_exercises.md) and [`deck2_exercises.md`](deck2_exercises.md).
 
 ## Prerequisites
 
@@ -25,6 +26,7 @@ pnpm install     # installs Slidev + Vue (versions pinned by pnpm-lock.yaml)
 pnpm dev         # Deck 1 - Foundations
 pnpm dev2        # Deck 2 - Principles & UML
 pnpm dev3        # Deck 3 - Design Patterns
+pnpm dev4        # Deck 4 - Cracking the LLD Interview
 ```
 
 Each command opens the deck at **http://localhost:3030**.
@@ -52,7 +54,7 @@ pnpm add -D playwright-chromium   # one-time, needed only for PDF export
 pnpm export3                      # PDF of Deck 3
 ```
 
-(`build` / `export` and `build2` / `export2` do the same for Decks 1 and 2.)
+(`build`/`export`, `build2`/`export2`, and `build4`/`export4` do the same for Decks 1, 2, and 4.)
 
 ## Tech stack
 
